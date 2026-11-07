@@ -16,7 +16,19 @@
   flex: 1; font: inherit; font-size: 13px; padding: 7px 6px; border: 0; border-radius: 6px;
   background: transparent; color: var(--muted); cursor: pointer;
 }
-.tab.active { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 0.14); }
+.tab.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgb(0 0 0 / 0.14); }
+.tab b { display: block; font-weight: 600; }
+.tab small { display: block; font-size: 11px; color: var(--muted); }
+
+/* control loop block diagram */
+.loop-diagram { width: 100%; height: auto; display: block; margin-top: 4px; }
+.loop-diagram .bd-line { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+.loop-diagram .bd-box { fill: var(--input-bg); stroke: var(--border); stroke-width: 1.2; }
+.loop-diagram .bd-txt { fill: var(--text); font: 600 12px system-ui, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+.loop-diagram .bd-lbl { fill: var(--muted); font: italic 12px Georgia, serif; text-anchor: middle; }
+.loop-diagram .bd-val { fill: var(--accent); font: 11px ui-monospace, Menlo, monospace; text-anchor: middle; }
+.loop-diagram .bd-val.sat { fill: #e09b14; }
+.loop-diagram .bd-head { fill: var(--muted); }
 
 .seg { display: flex; flex-wrap: wrap; gap: 4px; }
 .seg button {

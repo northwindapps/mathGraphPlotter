@@ -16,8 +16,9 @@
         <a class="nav-link" href="index.html">← Graph plotter</a>
       </header>
       <nav class="tabs" role="tablist">
-        <button class="tab" role="tab" data-sim="fluid">Fluid · Navier–Stokes</button>
-        <button class="tab" role="tab" data-sim="em">Light · Maxwell</button>
+        <button class="tab" role="tab" data-sim="fluid"><b>Fluid</b><small>Navier–Stokes</small></button>
+        <button class="tab" role="tab" data-sim="em"><b>Light</b><small>Maxwell</small></button>
+        <button class="tab" role="tab" data-sim="control"><b>Control</b><small>PID feedback</small></button>
       </nav>
       <div id="simPanel"></div>
     </aside>
@@ -33,6 +34,7 @@
   <script src="sim-ui.js"></script>
   <script src="sim-fluid.js"></script>
   <script src="sim-maxwell.js"></script>
+  <script src="sim-control.js"></script>
   <script src="sim.js"></script>
 </body>
 </html>

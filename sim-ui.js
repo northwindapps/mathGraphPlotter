@@ -34,6 +34,7 @@ window.SimUI = (() => {
       onInput(v);
     });
     wrap.append(top, input);
+    wrap.set = (v) => { input.value = v; out.textContent = format(v); };
     return wrap;
   }
 

@@ -42,6 +42,12 @@ Some equations (Maxwell, Navier–Stokes) are *partial differential equations*. 
 - Draw your own sources, plane waves, metal and glass. Adjust the wavelength and the glass refractive index.
 - Views: electric field, time-averaged intensity, magnetic-field arrows. Slow-mo and single-step show the Faraday ↔ Ampère hand-off.
 
+**Control: PID feedback** (960 Hz physics, controller runs every step)
+- Three plants: *servo motor* (DC motor + arm with gravity), *drone altitude* (gravity, drag, wind), *balancing robot* (inverted pendulum on a cart, with an outer position loop).
+- Sliders for Kp, Ki, Kd, plus presets that each show one lesson: P-only steady-state error, PD damping, PID, overshoot, integral windup, an unstable pendulum.
+- A live block diagram (r → Σ → PID → plant → sensor), plots of the output and of each P/I/D contribution, and rise-time / overshoot / settling metrics.
+- Real-world effects: actuator saturation, anti-windup, sensor noise (amplified by D), derivative kick, feed-forward, disturbances and a ⚡ Poke button.
+
 ## Files
 
 - `index.html`: page layout
@@ -50,4 +56,5 @@ Some equations (Maxwell, Navier–Stokes) are *partial differential equations*. 
 - `sim.html`, `sim.css`, `sim.js`: simulation page shell (tabs, canvas, input routing)
 - `sim-fluid.js`: Navier–Stokes solver and its panel
 - `sim-maxwell.js`: Maxwell FDTD solver and its panel
+- `sim-control.js`: PID controller, the three plants, plots and loop diagram
 - `sim-ui.js`: shared controls and color maps

@@ -42,6 +42,8 @@
     { value: 'series', label: 'Build from sines', hint: 'Pick a waveform, or choose “Draw your own” and paint on the right-hand graph' },
     { value: 'transform', label: 'Winding machine', hint: 'Drag on the spectrum plot to choose the winding frequency' },
     { value: 'draw', label: 'Draw with circles', hint: 'Draw any closed shape on the canvas with your mouse or finger' },
+    { value: 'spec3d', label: '3D: time ↔ frequency', hint: 'Drag to rotate · use the view buttons to fly between the time and frequency views' },
+    { value: 'helix', label: '3D: complex helix', hint: 'Drag to rotate · use the view buttons to look at each shadow head-on' },
   ];
 
   // ------------------------------------------------------------------ math helpers
@@ -106,6 +108,8 @@
       wave: 'square', N: 5, autoN: false,
       comps: [{ f: 2, a: 1 }, { f: 5, a: 0.7 }, { f: 6.5, a: 0 }], offset: 1, wf: 0.5, sweep: true,
       shape: 'heart', circles: 40,
+      N3: 7, hw: 2, hs: 0, helixPos: true, helixNeg: false, helixAvg: false, autoRot: true,
+      cam: { spec3d: { yaw: -0.65, pitch: 0.42 }, helix: { yaw: -0.75, pitch: 0.38 } },
     },
     p: 0, t: 0, W: 0, H: 0, hudTick: 0,
 
@@ -192,7 +196,176 @@
       p.append(s0);
       if (o.mode === 'series') this.panelSeries(p);
       else if (o.mode === 'transform') this.panelTransform(p);
+      else if (o.mode === 'spec3d') this.panelSpec3D(p);
+      else if (o.mode === 'helix') this.panelHelix(p);
       else this.panelDraw(p);
+    },
+
+    // ---------------------------------------------------------------- 3D helpers
+    // Orthographic camera: yaw spins around the vertical axis, pitch tilts to look from above.
+    camera(W, H, scale) {
+      const c = this.o.cam[this.o.mode], cy = Math.cos(c.yaw), sy = Math.sin(c.yaw), cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
+      const S = Math.min(W, H) * scale, ox = W / 2, oy = H * 0.56;
+      return (X, Y, Z) => {
+        const x = X * cy - Y * sy, d = X * sy + Y * cy;
+        return [ox + x * S, oy - (Z * cp + d * sp) * S, d * cp - Z * sp];
+      };
+    },
+    flyTo(yaw, pitch) { const c = this.o.cam[this.o.mode]; c.target = { yaw, pitch }; this.o.autoRot = false; if (this.rotBox) this.rotBox.querySelector('input').checked = false; },
+    updateCamera() {
+      const c = this.o.cam[this.o.mode];
+      if (!c) return;
+      if (c.target) {
+        c.yaw += (c.target.yaw - c.yaw) * 0.1; c.pitch += (c.target.pitch - c.pitch) * 0.1;
+        if (Math.abs(c.target.yaw - c.yaw) + Math.abs(c.target.pitch - c.pitch) < 1e-3) { c.yaw = c.target.yaw; c.pitch = c.target.pitch; c.target = null; }
+      } else if (this.o.autoRot && !this.rot) c.yaw = -0.65 + 0.45 * Math.sin(this.t * 0.25);
+    },
+    viewButtons(views) {
+      const row = el('div', 'controls-row');
+      for (const [label, yaw, pitch] of views) row.append(UI.button(label, () => this.flyTo(yaw, pitch)));
+      this.rotBox = UI.check({ label: 'Gently sway the 3D view', checked: this.o.autoRot, onChange: (v) => { this.o.autoRot = v; } });
+      return [row, this.rotBox];
+    },
+    line3(ctx, P, pts, color, width, dash) {
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []); ctx.lineJoin = 'round';
+      ctx.beginPath();
+      pts.forEach((q, k) => { const [x, y] = P(...q); if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      ctx.stroke(); ctx.setLineDash([]);
+    },
+    text3(ctx, P, q, txt, color, align = 'center') {
+      const [x, y] = P(...q);
+      ctx.fillStyle = color; ctx.font = '11.5px system-ui, sans-serif'; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(txt, x, y);
+    },
+
+    panelSpec3D(p) {
+      const o = this.o;
+      const s1 = UI.section('One signal, two views');
+      const eq = el('div', 'eq');
+      UI.tex(eq, String.raw`\underbrace{x(t)}_{\text{time domain}} = \sum_{k=1}^{N} \underbrace{A_k}_{\text{spectrum}}\cos(2\pi k f_0 t + \phi_k)`, true);
+      const n1 = el('p', 'note');
+      n1.innerHTML = 'Each sine is laid out at its own depth along a <b>frequency axis</b>. Look from the <b>front</b>: depth disappears and you see the waves stacked on top of each other, ' +
+        'with their sum (yellow, front row) being the signal. Look from the <b>side</b>: time disappears, each wave collapses to a vertical line reaching up to its amplitude (the green bars), and that row of bars <i>is</i> the spectrum. ' +
+        'Same object, two shadows. The Fourier transform is just turning your head.';
+      s1.append(eq, n1, ...this.viewButtons([['⟵ Time view (front)', 0, 0], ['Frequency view (side) ⟶', -Math.PI / 2, 0], ['3D', -0.65, 0.42]]));
+      const s2 = UI.section('Signal');
+      s2.append(UI.segmented({ options: Object.entries(WAVES).filter(([k]) => k !== 'draw').map(([value, w]) => ({ value, label: w.label })), value: o.wave === 'draw' ? 'square' : o.wave, onChange: (v) => this.setWave(v) }));
+      s2.append(UI.slider({ label: 'Number of sines N', min: 1, max: 15, step: 1, value: o.N3, format: (v) => `${v}`, onInput: (v) => { o.N3 = v; } }));
+      const n2 = el('p', 'note');
+      n2.innerHTML = 'The moving slice marks one instant: the yellow dot\'s height equals the <b>sum</b> of the dots on every wave behind it. ' +
+        'Try the square wave from the side: every other bar is missing (only odd harmonics).';
+      s2.append(n2);
+      p.append(s1, s2);
+    },
+
+    panelHelix(p) {
+      const o = this.o;
+      const s1 = UI.section("Euler's formula in 3D");
+      const eq = el('div', 'eq');
+      UI.tex(eq, String.raw`\begin{gathered} e^{i\omega t} = \textcolor{#5b9bff}{\cos\omega t} + i\,\textcolor{#e09b14}{\sin\omega t} \\[3pt]
+        \cos\omega t = \tfrac{1}{2}\big(e^{i\omega t} + e^{-i\omega t}\big) \end{gathered}`, true);
+      const n1 = el('p', 'note');
+      n1.innerHTML = 'Plot the complex number e<sup>iωt</sup> against time and it traces a <b>corkscrew</b>. Its shadow on the floor is <b style="color:#5b9bff">cos</b>, ' +
+        'on the back wall <b style="color:#e09b14">sin</b>, and looking straight down the time axis you see the <b style="color:#2fa36b">unit circle</b>: the winding from the winding machine. ' +
+        'Fourier uses complex exponentials because one helix carries both cos and sin, i.e. amplitude <i>and</i> phase.';
+      s1.append(eq, n1, ...this.viewButtons([['3D', -0.75, 0.38], ['Down the time axis', -Math.PI / 2, 0], ['Side: sin', 0, 0], ['Top: cos', 0, Math.PI / 2 - 0.001]]));
+      const s2 = UI.section('Explore');
+      s2.append(UI.slider({ label: 'Frequency ω (turns in view)', min: 0.5, max: 5, step: 0.05, value: o.hw, format: (v) => v.toFixed(2), onInput: (v) => { o.hw = v; } }));
+      s2.append(UI.termCard({
+        color: '#d6409f', tex: String.raw`e^{-i\omega t}`, title: 'Negative frequency',
+        body: 'Spins the other way. Add the two helices and their imaginary parts cancel, leaving a flat, purely real cosine. ' +
+          'That is why every real signal\'s spectrum is mirror-symmetric (±f): each real wave is a pair of opposite spins.',
+        controls: [
+          UI.check({ label: 'Show e^{+iωt} (yellow)', checked: o.helixPos, onChange: (v) => { o.helixPos = v; } }),
+          UI.check({ label: 'Show e^{−iωt} (pink)', checked: o.helixNeg, onChange: (v) => { o.helixNeg = v; } }),
+          UI.check({ label: 'Show their average = cos ωt (white)', checked: o.helixAvg, onChange: (v) => { o.helixAvg = v; } }),
+        ],
+      }));
+      s2.append(UI.termCard({
+        color: '#e09b14', tex: String.raw`e^{(\sigma + i\omega)t} = e^{st}`, title: 'Add decay → Laplace',
+        body: 'Give the exponent a real part σ and the helix becomes a spiral that shrinks (σ < 0) or grows (σ > 0). These spirals e<sup>st</sup> are exactly the building blocks of the ' +
+          '<b>Laplace transform</b>: every point on its s-plane is one of them. σ = 0 brings you back to Fourier.',
+        controls: [UI.slider({ label: 'Decay σ', min: -3, max: 1.5, step: 0.05, value: o.hs, format: (v) => v.toFixed(2), onInput: (v) => { o.hs = v; } })],
+      }));
+      p.append(s1, s2);
+    },
+
+    drawSpec3D(ctx, W, H) {
+      const o = this.o, c = this.coef, N = o.N3, P = this.camera(W, H, 0.3);
+      let amax = 1e-6;
+      for (let k = 1; k <= N; k++) amax = Math.max(amax, c.amp[k]);
+      const zs = 0.42 / Math.max(amax, 1), X = (t) => -1.2 + 1.2 * t, Y = (k) => -0.9 + (k / N) * 1.8;
+      // floor grid
+      for (let k = 0; k <= N; k++) this.line3(ctx, P, [[X(0), Y(k), -0.62], [X(2), Y(k), -0.62]], 'rgba(255,255,255,0.06)', 1);
+      for (let t = 0; t <= 2; t += 0.5) this.line3(ctx, P, [[X(t), Y(0), -0.62], [X(t), Y(N), -0.62]], 'rgba(255,255,255,0.06)', 1);
+      this.line3(ctx, P, [[X(0), Y(0), -0.62], [X(2.15), Y(0), -0.62]], 'rgba(255,255,255,0.4)', 1.5);
+      this.line3(ctx, P, [[X(2.12), Y(0), -0.62], [X(2.12), Y(N) + 0.15, -0.62]], 'rgba(255,255,255,0.4)', 1.5);
+      this.text3(ctx, P, [X(2.15) + 0.06, Y(0) - 0.08, -0.62], 'time →', '#c9cfda', 'left');
+      this.text3(ctx, P, [X(2.12), Y(N) + 0.28, -0.62], 'frequency →', '#c9cfda');
+      // draw rows back-to-front for the current camera
+      const rows = [];
+      for (let k = 0; k <= N; k++) rows.push({ k, depth: P(0, Y(k), 0)[2] });
+      rows.sort((a, b) => b.depth - a.depth);
+      const tc = (this.p % 2), cursor = [];
+      for (const { k } of rows) {
+        const fn = k === 0 ? (t) => partialSum(c, N, t % 1) : (t) => c.amp[k] * Math.cos(TAU * k * t + c.ph[k]);
+        const pts = [];
+        for (let i = 0; i <= 320; i++) { const t = (i / 320) * 2; pts.push([X(t), Y(k), fn(t) * zs]); }
+        const color = k === 0 ? COL.sig : `hsla(${170 + (k / N) * 160}, 75%, 62%, ${c.amp[k] < 1e-4 ? 0.15 : 0.9})`;
+        this.line3(ctx, P, [[X(0), Y(k), 0], [X(2), Y(k), 0]], 'rgba(255,255,255,0.08)', 1);
+        this.line3(ctx, P, pts, color, k === 0 ? 3 : 1.8);
+        // spectrum bar on the side wall
+        if (k > 0) {
+          this.line3(ctx, P, [[X(2.12), Y(k), 0], [X(2.12), Y(k), c.amp[k] * zs]], COL.spec, 5); // same height as the wave's peak
+          if (N <= 10 || k % 2 === 1) this.text3(ctx, P, [X(2.12), Y(k), -0.7], `${k}f₀`, '#7d8696');
+        }
+        cursor.push([k, fn(tc) * zs]);
+      }
+      // the moving time slice: each wave's value now, and their sum
+      this.line3(ctx, P, [[X(tc), Y(0), -0.62], [X(tc), Y(N), -0.62]], 'rgba(255,255,255,0.25)', 1, [3, 4]);
+      for (const [k, z] of cursor) {
+        const [x, y] = P(X(tc), Y(k), z);
+        ctx.fillStyle = k === 0 ? COL.sig : '#e8ebf1';
+        ctx.beginPath(); ctx.arc(x, y, k === 0 ? 5.5 : 3, 0, TAU); ctx.fill();
+      }
+      this.text3(ctx, P, [X(0) - 0.08, Y(0), 0], 'sum = signal', COL.sig, 'right');
+    },
+
+    drawHelix(ctx, W, H) {
+      const o = this.o, P = this.camera(W, H, 0.32), w = TAU * o.hw, s = o.hs;
+      const R = 0.62 / Math.max(1, Math.exp(s)), X = (t) => -1.3 + 2.6 * t, F = -0.78, B = 0.78, E = -1.42; // floor z, back-wall y, end-wall x
+      const pt = (t, sign = 1) => { const a = Math.exp(s * t) * R; return [X(t), a * Math.cos(w * t), sign * a * Math.sin(w * t)]; };
+      // walls
+      const wall = (corners, label, color) => {
+        ctx.fillStyle = 'rgba(255,255,255,0.035)'; ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+        ctx.beginPath(); corners.forEach((q, k) => { const [x, y] = P(...q); if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.closePath(); ctx.fill(); ctx.stroke();
+        this.text3(ctx, P, label[0], label[1], color);
+      };
+      wall([[X(0), -B, F], [X(1), -B, F], [X(1), B, F], [X(0), B, F]], [[X(1) + 0.12, -B, F], 'floor: Re = cos'], '#5b9bff');
+      wall([[X(0), B, F], [X(1), B, F], [X(1), B, -F], [X(0), B, -F]], [[X(0.5), B, -F + 0.1], 'back wall: Im = sin'], '#e09b14');
+      wall([[E, -B, F], [E, B, F], [E, B, -F], [E, -B, -F]], [[E, 0, -F + 0.1], 'end: the circle'], '#2fa36b');
+      // time axis
+      this.line3(ctx, P, [[E, 0, 0], [X(1) + 0.15, 0, 0]], 'rgba(255,255,255,0.35)', 1.2);
+      this.text3(ctx, P, [X(1) + 0.24, 0, 0], 'time →', '#c9cfda', 'left');
+      const n = 500, ts = Array.from({ length: n + 1 }, (_, i) => i / n);
+      const curves = [];
+      if (o.helixPos) curves.push([1, COL.sig]);
+      if (o.helixNeg) curves.push([-1, '#d6409f']);
+      for (const [sign, color] of curves) {
+        const h = ts.map((t) => pt(t, sign));
+        this.line3(ctx, P, h.map(([x, y]) => [x, y, F]), sign > 0 ? 'rgba(91,155,255,0.85)' : 'rgba(91,155,255,0.4)', 1.8);  // cos shadow
+        this.line3(ctx, P, h.map(([x, , z]) => [x, B, z]), sign > 0 ? 'rgba(224,155,20,0.85)' : 'rgba(214,64,159,0.6)', 1.8); // sin shadow
+        this.line3(ctx, P, h.map(([, y, z]) => [E, y, z]), 'rgba(47,163,107,0.8)', 1.6);                                   // circle / spiral
+        this.line3(ctx, P, h, color, 3);
+      }
+      if (o.helixAvg) this.line3(ctx, P, ts.map((t) => { const [x, y] = pt(t); return [x, y, 0]; }), '#ffffff', 2.6);
+      // moving point with its three projections
+      const tc = this.p % 1, sign = o.helixPos ? 1 : -1;
+      if (o.helixPos || o.helixNeg) {
+        const q = pt(tc, sign), proj = [[q[0], q[1], F], [q[0], B, q[2]], [E, q[1], q[2]]];
+        for (const pr of proj) this.line3(ctx, P, [q, pr], 'rgba(255,255,255,0.35)', 1, [3, 3]);
+        const dotAt = (pp, col, r) => { const [x, y] = P(...pp); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); };
+        dotAt(proj[0], '#5b9bff', 4); dotAt(proj[1], '#e09b14', 4); dotAt(proj[2], '#2fa36b', 4); dotAt(q, '#ffffff', 5.5);
+      }
     },
 
     panelSeries(p) {
@@ -305,8 +478,11 @@
           this.wfSlider && this.wfSlider.set(+o.wf.toFixed(2));
         }
       }
+      this.updateCamera();
       if (o.mode === 'series') this.drawSeries(ctx, W, H);
       else if (o.mode === 'transform') this.drawTransform(ctx, W, H);
+      else if (o.mode === 'spec3d') this.drawSpec3D(ctx, W, H);
+      else if (o.mode === 'helix') this.drawHelix(ctx, W, H);
       else this.drawCircles(ctx, W, H);
       if (++this.hudTick % 10 === 0) this.updateHud();
     },
@@ -321,6 +497,11 @@
       } else if (o.mode === 'transform') {
         const [re, im] = this.centerOfMass(o.wf);
         html = `Winding at <b>f = ${o.wf.toFixed(2)} Hz</b> · center of mass |X(f)|/T = ${Math.hypot(re, im).toFixed(3)}`;
+      } else if (o.mode === 'spec3d') {
+        const c = o.cam.spec3d, side = Math.abs(c.yaw + Math.PI / 2) < 0.05 && c.pitch < 0.05, front = Math.abs(c.yaw) < 0.05 && c.pitch < 0.05;
+        html = front ? '<b>Time view</b>: the sum of the sines is the signal' : side ? '<b>Frequency view</b>: each sine collapsed to a bar, i.e. the spectrum' : `<b>${o.N3}</b> sines laid out along a frequency axis · drag to rotate`;
+      } else if (o.mode === 'helix') {
+        html = `e<sup>(${o.hs.toFixed(2)} + i·${o.hw.toFixed(2)}·2π)t</sup> · ${o.hs === 0 ? 'pure rotation (Fourier)' : o.hs < 0 ? 'shrinking spiral (decaying, as in Laplace)' : 'growing spiral (unstable, as in Laplace)'}`;
       } else {
         html = `<b>${o.circles}</b> of ${NC} circles · shape: ${o.shape === 'custom' ? 'your drawing' : SHAPES[o.shape].label}`;
       }
@@ -527,6 +708,13 @@
     // ---------------------------------------------------------------- input
     pointer(type, x, y) {
       const o = this.o;
+      if (o.mode === 'spec3d' || o.mode === 'helix') { // drag to rotate
+        const c = o.cam[o.mode];
+        if (type === 'down') { this.rot = { x, y, yaw: c.yaw, pitch: c.pitch }; c.target = null; o.autoRot = false; if (this.rotBox) this.rotBox.querySelector('input').checked = false; }
+        else if (type === 'move' && this.rot) { c.yaw = this.rot.yaw - (x - this.rot.x) * 0.008; c.pitch = clamp(this.rot.pitch + (y - this.rot.y) * 0.008, -0.3, Math.PI / 2 - 0.001); }
+        else if (type === 'up' || type === 'leave') this.rot = null;
+        return;
+      }
       if (o.mode === 'series') {
         const g = this.seriesGeom;
         if (o.wave !== 'draw' || !g) return;

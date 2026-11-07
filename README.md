@@ -83,6 +83,10 @@ u(t) = Kp·e + Ki·∫e dt + Kd·de/dt
 - **Build from sines:** rotating circles (epicycles) add up to a square, sawtooth, triangle, pulse or **hand-painted** wave, with the spectrum below. Shows the Gibbs overshoot.
 - **Winding machine:** the signal is wrapped around a circle at frequency f, and the center of mass of the wrapped curve *is* X(f). It jumps away from zero exactly when f matches a frequency in the signal.
 - **Draw with circles:** draw any closed shape and spinning circles redraw it, which is the same idea behind JPEG and MP3 compression.
+- **3D: time ↔ frequency:** the component sines are laid out along a frequency axis. From the **front** they stack into the signal (the time domain); rotate to the **side** and each wave collapses to a bar, which is the spectrum (the frequency domain). Buttons animate the camera between the two views, and a moving slice shows the sum at one instant.
+- **3D: complex helix:** e^{iωt} drawn as a corkscrew in (time, Re, Im). Its shadows are cos (floor), sin (back wall) and the unit circle (looking down the time axis).
+  - Show e^{−iωt} too: the two opposite spins average to a flat, real cosine, which is why spectra have ±f.
+  - Add decay σ: the helix becomes the growing or shrinking spiral e^{st} that the Laplace transform is built from.
 
 ### Laplace: the s-plane
 - **Each point is a signal:** every point s = σ + iω corresponds to a growing or decaying oscillation e^{st}. Hover to see it.
@@ -135,7 +139,7 @@ Models have millions of weights, but the dynamics of training can be seen in two
 | Fluid | *Stable Fluids* (J. Stam, SIGGRAPH 1999): semi-Lagrangian advection, implicit diffusion, Gauss–Seidel pressure projection. Dye uses MacCormack advection with a limiter to stay sharp |
 | Light | FDTD on a Yee grid (K. Yee, 1966), 2D TMz polarisation, Courant number 0.5, graded absorbing border, PEC metal, dielectric glass |
 | Control | 960 Hz physics with semi-implicit Euler; PID with a filtered derivative, conditional-integration anti-windup and optional derivative-on-measurement; full nonlinear cart-pole dynamics |
-| Fourier | Direct DFT of 512 samples per period; complex DFT of a 256-point arc-length-resampled path for the drawings |
+| Fourier | Direct DFT of 512 samples per period; complex DFT of a 256-point arc-length-resampled path for the drawings; 3D views use a small orthographic camera (yaw/pitch, drag to rotate, animated flights between named views) drawn on Canvas 2D |
 | Laplace | Exact impulse and step responses from partial-fraction residues, h(t) = Σ rₖ e^{pₖt}; gain normalized to unit DC gain |
 | Circuits | 4th-order Runge–Kutta on (q, i), 20 sub-steps per frame; resonance curve from the impedance, \|I\| = V/\|Z\| |
 | Learning | Full-batch gradient descent / momentum / Adam; hand-written backpropagation for a tanh network with cross-entropy loss; landscape slice along two random directions scaled to the weight norm, with the path projected by least squares |
@@ -149,7 +153,7 @@ sim-ui.js                          shared controls and color maps
 sim-fluid.js                       Navier–Stokes
 sim-maxwell.js                     Maxwell FDTD
 sim-control.js                     PID and the three plants
-sim-fourier.js                     Fourier series, winding machine, drawing with circles
+sim-fourier.js                     Fourier series, winding machine, drawing with circles, 3D time↔frequency and complex helix
 sim-laplace.js                     s-plane, responses, 3D landscape
 sim-circuit.js                     RC / RL / LC / series & parallel RLC circuits and the mechanical twin
 sim-learning.js                    line fitting, optimizer race, tiny neural network + loss-landscape slice

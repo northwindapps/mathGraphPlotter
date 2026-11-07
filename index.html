@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Math Graph Plotter</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="panel">
+      <header class="brand">
+        <h1>Graph Plotter</h1>
+        <select id="presets" aria-label="Load an example">
+          <option value="">Examples…</option>
+        </select>
+      </header>
+
+      <section>
+        <h2>Expressions</h2>
+        <div id="exprList"></div>
+        <button id="addExpr" class="ghost-btn">+ Add expression</button>
+        <p class="hint">
+          Write <code>y = …</code>, <code>f(x) = …</code> or polar <code>r = …</code> (with <code>theta</code>).
+          Every other letter becomes a <b>slider</b>; <code>t</code> is <b>time</b>.
+          Press <kbd>Enter</kbd> for a new line.
+        </p>
+      </section>
+
+      <section>
+        <h2>Parameters</h2>
+        <div id="paramList"></div>
+        <p id="noParams" class="hint">No parameters yet. Try <code>y = a*sin(b*x)</code>.</p>
+      </section>
+
+      <section>
+        <h2>Time</h2>
+        <div class="timebar">
+          <button id="timePlay" class="icon-btn on" title="Play / pause time">⏸</button>
+          <button id="timeReset" class="icon-btn" title="Reset t to 0">↺</button>
+          <span class="tval">t = <span id="tValue">0.00</span></span>
+          <label class="speed">Speed
+            <select id="timeSpeed">
+              <option value="0.25">¼×</option>
+              <option value="0.5">½×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+            </select>
+          </label>
+        </div>
+        <p id="timeHint" class="hint">No expression uses <code>t</code>. Add it to animate over time.</p>
+      </section>
+
+      <section>
+        <h2>Display</h2>
+        <label class="check"><input type="checkbox" id="optTangent"> Tangent line on hover</label>
+        <label class="check"><input type="checkbox" id="optDeriv"> Plot derivative of selected curve</label>
+        <label class="check"><input type="checkbox" id="optGhost"> Ghost trails while animating</label>
+        <label class="row">Polar θ from 0 to
+          <input type="number" id="thetaMax" min="1" max="40" step="1"> π
+        </label>
+        <div class="btn-row">
+          <button id="resetView" class="ghost-btn">Reset view</button>
+          <button id="share" class="ghost-btn">Copy share link</button>
+        </div>
+      </section>
+    </aside>
+
+    <main class="stage">
+      <canvas id="plot"></canvas>
+      <div id="readout" class="readout" hidden></div>
+      <div class="stage-hint">Drag to pan · Scroll to zoom · Shift+scroll: y only · Alt+scroll: x only</div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/mathjs@12.4.1/lib/browser/math.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

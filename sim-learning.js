@@ -225,7 +225,7 @@
         'Momentum builds up speed along the floor; Adam rescales each direction separately.',
     },
     rosen: {
-      label: 'Banana (Rosenbrock)', X: [-2, 2], Y: [-1, 3], start: [-1.6, 2.6], lr: 0.0018, lrAdam: 0.05,
+      label: 'Banana (Rosenbrock)', logHeight: true, X: [-2, 2], Y: [-1, 3], start: [-1.6, 2.6], lr: 0.0018, lrAdam: 0.05,
       f: (x, y) => (1 - x) ** 2 + 10 * (y - x * x) ** 2,
       about: 'A curved, flat-bottomed valley: a classic optimizer stress test. Finding the valley is easy; following its bend to the minimum at (1, 1) is hard.',
     },
@@ -295,19 +295,24 @@
         this.heat = { ...h, key: o.surface, w: Math.round(bw) };
         S.fmin = h.min;
       }
-      ctx.imageSmoothingEnabled = true; ctx.drawImage(this.heat.canvas, mBox.x, mBox.y, mBox.w, mBox.h);
-      frameBox(ctx, mBox, `Loss surface: ${S.label} (darker = lower) · click to choose the start`);
-      axisLabels(ctx, mBox, 'weight 1 →', 'weight 2 →');
-      ctx.save(); ctx.beginPath(); ctx.rect(mBox.x, mBox.y, mBox.w, mBox.h); ctx.clip();
-      for (const { key, color } of OPTS) {
-        const r = o.runs[key];
-        if (!o.enabled[key]) continue;
-        polyline(ctx, r.path.map(([x, y]) => [mBox.sx(x), mBox.sy(y)]), color, 2);
-        dot(ctx, mBox.sx(r.p[0]), mBox.sy(r.p[1]), 6.5, color, '#0b0e14');
+      if (o.view === '3d') {
+        sim.regions.tBox = { x: 46, y: 100, w: mapW, h: mapH };
+        this.terrain(ctx, sim.regions.tBox, o, S);
+      } else {
+        ctx.imageSmoothingEnabled = true; ctx.drawImage(this.heat.canvas, mBox.x, mBox.y, mBox.w, mBox.h);
+        frameBox(ctx, mBox, `Loss surface: ${S.label} (darker = lower) · click to choose the start`);
+        axisLabels(ctx, mBox, 'weight 1 →', 'weight 2 →');
+        ctx.save(); ctx.beginPath(); ctx.rect(mBox.x, mBox.y, mBox.w, mBox.h); ctx.clip();
+        for (const { key, color } of OPTS) {
+          const r = o.runs[key];
+          if (!o.enabled[key]) continue;
+          polyline(ctx, r.path.map(([x, y]) => [mBox.sx(x), mBox.sy(y)]), color, 2);
+          dot(ctx, mBox.sx(r.p[0]), mBox.sy(r.p[1]), 6.5, color, '#0b0e14');
+        }
+        const s0 = o.runs.gd.path[0];
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(mBox.sx(s0[0]), mBox.sy(s0[1]), 8, 0, TAU); ctx.stroke();
+        ctx.restore();
       }
-      const s0 = o.runs.gd.path[0];
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(mBox.sx(s0[0]), mBox.sy(s0[1]), 8, 0, TAU); ctx.stroke();
-      ctx.restore();
       // loss chart
       const cb = wide ? { x: W * 0.6 + 10, y: 100, w: W * 0.4 - 30, h: H - 136 } : { x: 46, y: mBox.y + mBox.h + 40, w: W - 70, h: H - mBox.y - mBox.h - 70 };
       if (cb.h > 60) {
@@ -322,9 +327,79 @@
         }
       }
     },
+    // 3D view: the loss surface as a shaded landscape with the optimizers rolling on it
+    terrain(ctx, b, o, S) {
+      const ar = (S.Y[1] - S.Y[0]) / (S.X[1] - S.X[0]), nx = 46, ny = Math.max(16, Math.round(46 * ar));
+      if (!this.tgrid || this.tgrid.key !== o.surface) {
+        const F = [];
+        let mn = Infinity, mx = -Infinity;
+        for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
+          const v = S.f(S.X[0] + (i / nx) * (S.X[1] - S.X[0]), S.Y[0] + (j / ny) * (S.Y[1] - S.Y[0]));
+          F.push(v); mn = Math.min(mn, v); mx = Math.max(mx, v);
+        }
+        this.tgrid = { key: o.surface, F, mn, mx };
+      }
+      const { F, mn, mx } = this.tgrid, logH = !!S.logHeight, eps = 1e-3 * (mx - mn);
+      const lo = logH ? Math.log(eps) : 0, hi = logH ? Math.log(mx - mn + eps) : mx - mn;
+      const Zn = (f) => clamp(((logH ? Math.log(Math.max(f - mn, 0) + eps) : f - mn) - lo) / (hi - lo || 1), 0, 1.15); // 0…1 height
+      const cam = o.cam, cyw = Math.cos(cam.yaw), syw = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      const Sc = Math.min(b.w, b.h * 1.25) * 0.4, ox = b.x + b.w / 2, oy = b.y + b.h * 0.56;
+      const world = (x, y, f) => [((clamp(x, S.X[0], S.X[1]) - S.X[0]) / (S.X[1] - S.X[0])) * 2 - 1, (((clamp(y, S.Y[0], S.Y[1]) - S.Y[0]) / (S.Y[1] - S.Y[0])) * 2 - 1) * ar, Zn(f) * 0.9 - 0.45];
+      const proj = ([X, Y, Z]) => { const x = X * cyw - Y * syw, d = X * syw + Y * cyw; return [ox + x * Sc, oy - (Z * cp + d * sp) * Sc, d * cp - Z * sp]; };
+      // mesh, painter's algorithm, with simple light shading so the shape reads as 3D
+      const Wp = [];
+      for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
+        const x = S.X[0] + (i / nx) * (S.X[1] - S.X[0]), y = S.Y[0] + (j / ny) * (S.Y[1] - S.Y[0]);
+        Wp.push(world(x, y, F[j * (nx + 1) + i]));
+      }
+      const L = [-0.45, -0.55, 0.7], Ln = Math.hypot(...L), quads = [];
+      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+        const k = j * (nx + 1) + i, a = Wp[k], bq = Wp[k + 1], c = Wp[k + nx + 2], d = Wp[k + nx + 1];
+        const ux = [bq[0] - a[0], bq[1] - a[1], bq[2] - a[2]], uy = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+        const nrm = [ux[1] * uy[2] - ux[2] * uy[1], ux[2] * uy[0] - ux[0] * uy[2], ux[0] * uy[1] - ux[1] * uy[0]], nl = Math.hypot(...nrm) || 1;
+        const shade = 0.55 + 0.45 * Math.max(0, (nrm[0] * L[0] + nrm[1] * L[1] + nrm[2] * L[2]) / (nl * Ln));
+        const pts = [a, bq, c, d].map(proj);
+        quads.push({ pts, depth: (pts[0][2] + pts[1][2] + pts[2][2] + pts[3][2]) / 4, t: (a[2] + bq[2] + c[2] + d[2]) / 4 / 0.9 + 0.5, shade });
+      }
+      quads.sort((p, q) => q.depth - p.depth);
+      ctx.lineWidth = 0.5;
+      for (const q of quads) {
+        const idx = (clamp(q.t, 0, 1) * 255) | 0;
+        ctx.fillStyle = `rgb(${(SEQ[idx * 3] * q.shade) | 0},${(SEQ[idx * 3 + 1] * q.shade) | 0},${(SEQ[idx * 3 + 2] * q.shade) | 0})`;
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.beginPath(); q.pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+      // trails and balls, lifted slightly above the surface
+      const lift = (x, y) => proj((() => { const w = world(x, y, S.f(x, y)); w[2] += 0.015; return w; })());
+      for (const { key, color } of OPTS) {
+        const r = o.runs[key];
+        if (!o.enabled[key]) continue;
+        const stride = Math.max(1, Math.floor(r.path.length / 800));
+        const pts = []; for (let k = 0; k < r.path.length; k += stride) pts.push(lift(...r.path[k]));
+        pts.push(lift(...r.p));
+        polyline(ctx, pts.map(([x, y]) => [x, y]), color, 2.2);
+      }
+      const s0 = lift(...o.runs.gd.path[0]);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(s0[0], s0[1], 8, 0, TAU); ctx.stroke();
+      for (const { key, color } of OPTS) {
+        const r = o.runs[key];
+        if (!o.enabled[key]) continue;
+        const [x, y] = lift(...r.p), g = ctx.createRadialGradient(x - 3, y - 3, 1, x, y, 9);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, color); g.addColorStop(1, '#0b0e14');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 8, 0, TAU); ctx.fill();
+      }
+      ctx.fillStyle = '#c9cfda'; ctx.font = '600 11.5px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+      ctx.fillText(`3D terrain: ${S.label} · height = loss${logH ? ' (log-scaled, the walls are steep)' : ''} · drag to rotate`, b.x, b.y - 6);
+    },
     pointer(type, x, y, sim) {
-      const { mBox } = sim.regions || {};
-      if (type === 'down' && mBox && mBox.inside(x, y)) this.restart(sim.o.race, mBox.dx(x), mBox.dy(y));
+      const o = sim.o.race, { mBox } = sim.regions || {};
+      if (o.view === '3d') { // drag rotates the terrain
+        if (type === 'down') sim.rotRace = { x, y, yaw: o.cam.yaw, pitch: o.cam.pitch };
+        else if (type === 'move' && sim.rotRace) { o.cam.yaw = sim.rotRace.yaw - (x - sim.rotRace.x) * 0.008; o.cam.pitch = clamp(sim.rotRace.pitch + (y - sim.rotRace.y) * 0.008, 0.1, 1.5); }
+        else if (type === 'up' || type === 'leave') sim.rotRace = null;
+        return;
+      }
+      if (type === 'down' && mBox && mBox.inside(x, y)) this.restart(o, mBox.dx(x), mBox.dy(y));
     },
   };
 
@@ -715,11 +790,11 @@
 
   const sim = {
     id: 'learning',
-    get hint() { return MODES.find((m) => m.value === this.o.mode).hint; },
+    get hint() { return this.o.mode === 'race' && this.o.race.view === '3d' ? 'Drag to rotate the terrain · switch to the contour map to pick a new start' : MODES.find((m) => m.value === this.o.mode).hint; },
     o: {
       mode: 'line', running: true,
       line: { lr: 0.3, speed: 8 },
-      race: { surface: 'valley', lr: 0.95, lrAdam: 0.1, beta: 0.9, speed: 30, enabled: { gd: true, mom: true, adam: true } },
+      race: { surface: 'valley', lr: 0.95, lrAdam: 0.1, beta: 0.9, speed: 30, enabled: { gd: true, mom: true, adam: true }, view: '2d', cam: { yaw: -0.65, pitch: 0.75 } },
       net: { H: 6, dataset: 'circle', optimizer: 'adam', lr: 0.03, speed: 4, addClass: 1 },
       lag: { prob: 'hill', view: '2d', cam: { yaw: -0.6, pitch: 0.75 } },
     },
@@ -828,6 +903,8 @@
       const n = el('p', 'note'); n.innerHTML = S.about; s1.append(n);
       s1.append(UI.slider({ label: 'Steps per second', min: 1, max: 120, step: 1, value: o.speed, format: (v) => `${v}`, onInput: (v) => { o.speed = v; } }));
       s1.append(UI.button('↺ Restart race', () => RACE.restart(o, o.runs.gd.path[0][0], o.runs.gd.path[0][1])));
+      s1.append(UI.segmented({ options: [{ value: '2d', label: 'Contour map' }, { value: '3d', label: '3D terrain' }], value: o.view, onChange: (v) => { o.view = v; document.getElementById('stageHint').textContent = this.hint; } }));
+      s1.append(el('p', 'note', 'In 3D, drag to rotate. Switch back to the contour map to click a new starting point.'));
       const s2 = UI.section('The optimizers');
       const toggle = (key) => UI.check({ label: 'Race this one', checked: o.enabled[key], onChange: (v) => { o.enabled[key] = v; } });
       s2.append(UI.termCard({ color: COL.gd, tex: String.raw`\theta \leftarrow \theta - \eta\,\nabla L`, title: 'Gradient descent',

@@ -11,6 +11,7 @@
   const SEQ = UI.lut(UI.SEQ_STOPS), DIV = UI.lut(UI.DIV_STOPS);
   const TARGET_CELLS = 60000;
   const SC = 0.5;
+  const TAU = Math.PI * 2;
   const VAC = 0, METAL = 1, GLASS = 2;
 
   class FDTD {
@@ -190,11 +191,173 @@
   ];
   const SPEEDS = [{ value: 0.34, label: 'Slow-mo' }, { value: 3, label: 'Normal' }, { value: 8, label: 'Fast' }];
 
+  // ------------------------------------------------------------------ 3D plane wave
+  // Travels along +x. E lies in the y–z plane, B = x̂ × E / c (drawn scaled up: in SI units B is tiny).
+  const PLANE = {
+    hint: 'Drag to rotate · use the view buttons to look along the beam',
+    X0: -1.7, X1: 1.7, PX: 0.15, // beam extent and polarizer position
+    // E-field (y, z components) at position x and time t, before any polarizer
+    E(q, x) {
+      const ph = TAU * q.waves * ((x - this.X0) / (this.X1 - this.X0)) - q.t, A = 0.55;
+      if (q.pol === 'circular') return [A * Math.cos(ph), A * Math.sin(ph)];
+      const a = q.pol === 'tilted' ? (q.tilt * Math.PI) / 180 : 0, s = A * Math.sin(ph);
+      return [s * Math.cos(a), s * Math.sin(a)];
+    },
+    field(q, x) { // after the polarizer only the component along its axis survives
+      let [ey, ez] = this.E(q, x);
+      if (q.polarizer && x > this.PX) {
+        const a = (q.polAngle * Math.PI) / 180, ay = Math.cos(a), az = Math.sin(a), d = ey * ay + ez * az;
+        ey = d * ay; ez = d * az;
+      }
+      return { E: [ey, ez], B: [-ez, ey] }; // B = x̂ × E: (0, −Ez, Ey)
+    },
+    transmitted(q) { // time-averaged intensity fraction after the polarizer (Malus's law)
+      if (!q.polarizer) return 1;
+      if (q.pol === 'circular') return 0.5;
+      const a = ((q.pol === 'tilted' ? q.tilt : 0) - q.polAngle) * (Math.PI / 180);
+      return Math.cos(a) ** 2;
+    },
+    camera(W, H, q) {
+      const c = q.cam, cy = Math.cos(c.yaw), sy = Math.sin(c.yaw), cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
+      const S = Math.min(W * 0.27, H * 0.42), ox = W / 2, oy = H * 0.55;
+      // world: X along the beam, Y up, Z depth → screen
+      return (X, Y, Z) => { const x = X * cy - Z * sy, d = X * sy + Z * cy; return [ox + x * S, oy - (Y * cp + d * sp) * S, d * cp - Y * sp]; };
+    },
+    frame(ctx, W, H, q) {
+      if (q.running) q.t += (q.speed * TAU) / 120;
+      if (q.cam.target) {
+        const c = q.cam; c.yaw += (c.target.yaw - c.yaw) * 0.1; c.pitch += (c.target.pitch - c.pitch) * 0.1;
+        if (Math.abs(c.target.yaw - c.yaw) + Math.abs(c.target.pitch - c.pitch) < 1e-3) { c.yaw = c.target.yaw; c.pitch = c.target.pitch; c.target = null; }
+      }
+      const P = this.camera(W, H, q), line = (pts, color, width, dash) => {
+        ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []); ctx.beginPath();
+        pts.forEach((p3, k) => { const [x, y] = P(...p3); if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke(); ctx.setLineDash([]);
+      };
+      const label = (p3, txt, color, align = 'left') => { const [x, y] = P(...p3); ctx.fillStyle = color; ctx.font = '600 12px system-ui'; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(txt, x, y); };
+      // faint reference planes: E's vertical plane and B's horizontal plane
+      for (const [k, col] of [[0, 'rgba(229,72,77,0.07)'], [1, 'rgba(61,139,253,0.07)']]) {
+        const c = k === 0 ? [[this.X0, -0.7, 0], [this.X1, -0.7, 0], [this.X1, 0.7, 0], [this.X0, 0.7, 0]] : [[this.X0, 0, -0.7], [this.X1, 0, -0.7], [this.X1, 0, 0.7], [this.X0, 0, 0.7]];
+        ctx.fillStyle = col; ctx.beginPath(); c.forEach((p3, i) => { const [x, y] = P(...p3); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.closePath(); ctx.fill();
+      }
+      // propagation axis
+      line([[this.X0 - 0.1, 0, 0], [this.X1 + 0.25, 0, 0]], 'rgba(255,255,255,0.55)', 1.5);
+      const tip = P(this.X1 + 0.25, 0, 0), base = P(this.X1 + 0.1, 0, 0), ang = Math.atan2(tip[1] - base[1], tip[0] - base[0]);
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(tip[0], tip[1]); ctx.lineTo(tip[0] - 11 * Math.cos(ang - 0.4), tip[1] - 11 * Math.sin(ang - 0.4)); ctx.lineTo(tip[0] - 11 * Math.cos(ang + 0.4), tip[1] - 11 * Math.sin(ang + 0.4)); ctx.closePath(); ctx.fill();
+      label([this.X1 + 0.32, 0, 0], 'travel direction (speed c)', '#e8ebf1');
+      // polarizer frame with its transmission axis
+      if (q.polarizer) {
+        const a = (q.polAngle * Math.PI) / 180, R = 0.75, sq = [[-R, -R], [R, -R], [R, R], [-R, R]].map(([y, z]) => [this.PX, y, z]);
+        ctx.fillStyle = 'rgba(200,210,225,0.08)'; ctx.beginPath(); sq.forEach((p3, i) => { const [x, y] = P(...p3); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.closePath(); ctx.fill();
+        line([...sq, sq[0]], 'rgba(200,210,225,0.5)', 1.2);
+        for (let k = -4; k <= 4; k++) { // slits along the transmission axis
+          const off = k * 0.15, py = -Math.sin(a) * off, pz = Math.cos(a) * off;
+          line([[this.PX, py - Math.cos(a) * 0.7, pz - Math.sin(a) * 0.7], [this.PX, py + Math.cos(a) * 0.7, pz + Math.sin(a) * 0.7]], 'rgba(200,210,225,0.22)', 1);
+        }
+        line([[this.PX, -Math.cos(a) * 0.85, -Math.sin(a) * 0.85], [this.PX, Math.cos(a) * 0.85, Math.sin(a) * 0.85]], '#e8ebf1', 2.2, [6, 4]);
+        label([this.PX, 0.95, 0], 'polarizer', '#c9cfda', 'center');
+      }
+      // field vectors along the beam
+      const n = 64, Ecurve = [], Bcurve = [];
+      for (let i = 0; i <= n; i++) {
+        const x = this.X0 + (i / n) * (this.X1 - this.X0), f = this.field(q, x);
+        Ecurve.push([x, f.E[0], f.E[1]]); Bcurve.push([x, f.B[0], f.B[1]]);
+        if (i % 2 === 0) {
+          if (q.showB) line([[x, 0, 0], [x, f.B[0], f.B[1]]], 'rgba(61,139,253,0.55)', 1.4);
+          line([[x, 0, 0], [x, f.E[0], f.E[1]]], 'rgba(229,72,77,0.65)', 1.6);
+        }
+      }
+      if (q.showB) line(Bcurve, '#5b9bff', 2.6);
+      line(Ecurve, '#ff6b6f', 2.8);
+      // Poynting vector S = E × B / μ0 : always along +x, size ∝ |E|²
+      if (q.showS) {
+        for (let i = 2; i < n; i += 6) {
+          const x = this.X0 + (i / n) * (this.X1 - this.X0), f = this.field(q, x), s = (f.E[0] ** 2 + f.E[1] ** 2) / 0.3025; // normalised by A²
+          if (s < 0.02) continue;
+          const a = P(x, -0.9, 0), b = P(x + 0.28 * s, -0.9, 0);
+          ctx.strokeStyle = '#f5c451'; ctx.fillStyle = '#f5c451'; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
+          const g = Math.atan2(b[1] - a[1], b[0] - a[0]);
+          ctx.beginPath(); ctx.moveTo(...b); ctx.lineTo(b[0] - 8 * Math.cos(g - 0.45), b[1] - 8 * Math.sin(g - 0.45)); ctx.lineTo(b[0] - 8 * Math.cos(g + 0.45), b[1] - 8 * Math.sin(g + 0.45)); ctx.closePath(); ctx.fill();
+        }
+        label([this.X0, -1.05, 0], 'S = E × B / μ₀ (energy flow)', '#f5c451');
+      }
+      // legend
+      ctx.font = '600 12.5px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillStyle = '#ff6b6f'; ctx.fillText('E  electric field', 20, H - 64);
+      if (q.showB) { ctx.fillStyle = '#5b9bff'; ctx.fillText('B  magnetic field (drawn ×c so it is visible)', 20, H - 44); }
+    },
+    panel(p, sim) {
+      const q = sim.o.plane;
+      const s1 = UI.section('A light wave in 3D');
+      const eq = el('div', 'eq');
+      UI.tex(eq, String.raw`\begin{gathered} \textcolor{#ff6b6f}{\mathbf{E}} = E_0 \sin(kx - \omega t)\,\hat{\mathbf y}, \quad \textcolor{#5b9bff}{\mathbf{B}} = \tfrac{E_0}{c} \sin(kx - \omega t)\,\hat{\mathbf z} \\[4pt]
+        \mathbf{S} = \tfrac{1}{\mu_0}\,\mathbf{E}\times\mathbf{B}, \qquad c = \tfrac{\omega}{k} = \tfrac{1}{\sqrt{\mu_0\varepsilon_0}} \end{gathered}`, true);
+      const n1 = el('p', 'note');
+      n1.innerHTML = 'The textbook picture of light, live. The <b style="color:#ff6b6f">electric</b> and <b style="color:#5b9bff">magnetic</b> fields are <b>perpendicular to each other and to the direction of travel</b>, ' +
+        'and they peak together (in phase). The 2D simulation is a slice of exactly this wave, with E pointing out of the screen.';
+      s1.append(eq, n1);
+      const views = el('div', 'controls-row');
+      const fly = (yaw, pitch) => { q.cam.target = { yaw, pitch }; };
+      views.append(UI.button('3D', () => fly(-0.55, 0.32)), UI.button('Look along the beam', () => fly(-Math.PI / 2 + 0.0001, 0.0001)), UI.button('Side (see E)', () => fly(0, 0)), UI.button('Top (see B)', () => fly(0, Math.PI / 2 - 0.001)));
+      const row = el('div', 'controls-row');
+      const play = UI.button(q.running ? '⏸ Pause' : '▶ Play', () => { q.running = !q.running; play.textContent = q.running ? '⏸ Pause' : '▶ Play'; });
+      row.append(play);
+      s1.append(views, row);
+      s1.append(UI.slider({ label: 'Wavelengths in view', min: 0.5, max: 5, step: 0.1, value: q.waves, format: (v) => v.toFixed(1), onInput: (v) => { q.waves = v; } }));
+      s1.append(UI.slider({ label: 'Speed', min: 0.1, max: 3, step: 0.1, value: q.speed, format: (v) => `${v.toFixed(1)}×`, onInput: (v) => { q.speed = v; } }));
+      s1.append(UI.check({ label: 'Show B', checked: q.showB, onChange: (v) => { q.showB = v; } }));
+      s1.append(UI.check({ label: 'Show energy flow (Poynting vector)', checked: q.showS, onChange: (v) => { q.showS = v; } }));
+
+      const s2 = UI.section('Polarization');
+      s2.append(UI.segmented({ options: [{ value: 'vertical', label: 'Vertical' }, { value: 'tilted', label: 'Tilted' }, { value: 'circular', label: 'Circular' }], value: q.pol, onChange: (v) => { q.pol = v; sim.buildPanel(); } }));
+      if (q.pol === 'tilted') s2.append(UI.slider({ label: 'Tilt of E', min: 0, max: 180, step: 1, value: q.tilt, format: (v) => `${v}°`, onInput: (v) => { q.tilt = v; } }));
+      const pn = el('p', 'note');
+      pn.innerHTML = q.pol === 'circular'
+        ? '<b>Circular:</b> E keeps its length and rotates as the wave moves, tracing a corkscrew, the same helix as e<sup>iωt</sup> in the Fourier tab. It is two perpendicular linear waves a quarter-cycle apart. Look along the beam to see the circle.'
+        : '<b>Linear:</b> E always swings back and forth along one line. Look along the beam and the tip of E draws a straight line; its angle is the polarization.';
+      s2.append(pn);
+      s2.append(UI.termCard({
+        color: '#c9cfda', tex: String.raw`I = I_0 \cos^2\theta`, title: "Polarizer & Malus's law",
+        body: 'A polarizing filter only lets through the part of E along its axis. Amplitude scales by cos θ, so <b>intensity</b> (∝ E²) scales by <b>cos²θ</b>. At 90° nothing passes. ' +
+          'Circular light always loses half. Polarized sunglasses block glare (which is mostly horizontally polarized); LCD screens and 3D cinema glasses work the same way.',
+        controls: [
+          UI.check({ label: 'Put a polarizer in the beam', checked: q.polarizer, onChange: (v) => { q.polarizer = v; } }),
+          UI.slider({ label: 'Polarizer axis', min: 0, max: 180, step: 1, value: q.polAngle, format: (v) => `${v}°`, onInput: (v) => { q.polAngle = v; } }),
+        ],
+      }));
+      const s3 = UI.section('Why it travels');
+      s3.append(UI.termCard({
+        color: '#ff6b6f', tex: String.raw`\nabla\times\mathbf{E} = -\tfrac{\partial\mathbf{B}}{\partial t}, \;\; \nabla\times\mathbf{B} = \mu_0\varepsilon_0\tfrac{\partial\mathbf{E}}{\partial t}`, title: 'E and B keep each other going',
+        body: 'Where E varies along the beam, B must change in time (Faraday); where B varies, E must change in time (Ampère–Maxwell). Each one regenerates the other a little further on, so the pattern ' +
+          'moves without any wire or medium. Plug the sine wave in and the equations demand speed ω/k = 1/√(μ₀ε₀) ≈ 3 × 10⁸ m/s. Maxwell computed this and realised <b>light is an electromagnetic wave</b>.',
+      }));
+      p.append(s1, s2, s3);
+    },
+    hud(q) {
+      const tr = this.transmitted(q);
+      let html = `E ⟂ B ⟂ direction of travel · E and B in phase · |B| = |E|/c`;
+      if (q.polarizer) {
+        let d = ((((q.pol === 'tilted' ? q.tilt : 0) - q.polAngle) % 180) + 180) % 180;
+        if (d > 90) d = 180 - d; // angle between the light's E and the filter axis, 0…90°
+        html += `<div>after the polarizer: intensity <b>${(tr * 100).toFixed(1)}%</b> ${q.pol === 'circular' ? '(circular light: always 50%)' : `= cos²(${d.toFixed(0)}°)`}</div>`;
+      }
+      return html;
+    },
+    pointer(type, x, y, q) {
+      if (type === 'down') { this.rot = { x, y, yaw: q.cam.yaw, pitch: q.cam.pitch }; q.cam.target = null; }
+      else if (type === 'move' && this.rot) { q.cam.yaw = this.rot.yaw - (x - this.rot.x) * 0.008; q.cam.pitch = Math.max(-1.5, Math.min(1.5, this.rot.pitch + (y - this.rot.y) * 0.008)); }
+      else if (type === 'up' || type === 'leave') this.rot = null;
+    },
+  };
+
   // ------------------------------------------------------------------ module
   const sim = {
     id: 'em',
-    hint: 'Click / drag on the canvas with the selected tool',
-    o: { preset: 'slit', tool: 'point', view: 'field', arrows: false, n: 1.5, brush: 4, running: true, speed: 3, lamS: null },
+    get hint() { return this.o.view3 === 'plane' ? PLANE.hint : 'Click / drag on the canvas with the selected tool'; },
+    o: {
+      preset: 'slit', tool: 'point', view: 'field', arrows: false, n: 1.5, brush: 4, running: true, speed: 3, lamS: null, view3: 'sim',
+      plane: { pol: 'vertical', tilt: 45, waves: 2, speed: 1, showB: true, showS: false, polarizer: false, polAngle: 30, t: 0, running: true, cam: { yaw: -0.55, pitch: 0.32 } },
+    },
     s: null, W: 0, H: 0, acc: 0, hudTick: 0, drag: null,
     scale: { e: 0.05, i: 0.002, h: 0.05 },
 
@@ -230,6 +393,17 @@
       const o = this.o, p = this.panel;
       if (!p) return;
       p.replaceChildren();
+
+      const s0 = UI.section('View');
+      s0.append(UI.segmented({
+        options: [{ value: 'sim', label: '2D simulation (FDTD)' }, { value: 'plane', label: '3D plane wave' }],
+        value: o.view3, onChange: (v) => {
+          o.view3 = v; this.buildPanel();
+          document.getElementById('stageHint').textContent = this.hint;
+        },
+      }));
+      p.append(s0);
+      if (o.view3 === 'plane') { PLANE.panel(p, this); return; }
 
       const s1 = UI.section('Experiment');
       s1.append(UI.segmented({
@@ -309,7 +483,9 @@
     },
 
     updateHud() {
-      if (!this.hud || !this.s) return;
+      if (!this.hud) return;
+      if (this.o.view3 === 'plane') { const html = PLANE.hud(this.o.plane); if (html !== this.lastHud) { this.hud.innerHTML = html; this.lastHud = html; } return; }
+      if (!this.s) return;
       const o = this.o, parts = [];
       parts.push(`λ = ${this.s.lambda} cells in vacuum · glass n = ${o.n.toFixed(2)} → λ in glass = ${(this.s.lambda / o.n).toFixed(1)}`);
       parts.push(o.view === 'field'
@@ -321,6 +497,11 @@
 
     // ---------------------------------------------------------------- loop
     frame(ctx, W, H) {
+      if (this.o.view3 === 'plane') {
+        PLANE.frame(ctx, W, H, this.o.plane);
+        if (++this.hudTick % 6 === 0) this.updateHud();
+        return;
+      }
       const s = this.s;
       if (!s) return;
       if (this.o.running) {
@@ -405,6 +586,7 @@
 
     // ---------------------------------------------------------------- input
     pointer(type, x, y) {
+      if (this.o.view3 === 'plane') { PLANE.pointer(type, x, y, this.o.plane); return; }
       const s = this.s;
       if (!s) return;
       const ci = (x / this.W) * s.nx - 0.5, cj = (y / this.H) * s.ny - 0.5, o = this.o;
@@ -426,5 +608,6 @@
     },
   };
 
+  sim._internals = { PLANE };
   (window.Sims = window.Sims || {}).em = sim;
 })();

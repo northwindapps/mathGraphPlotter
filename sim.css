@@ -20,6 +20,10 @@
 .tab b { display: block; font-weight: 600; }
 .tab small { display: block; font-size: 11px; color: var(--muted); }
 
+/* 3×3 kernel editor */
+.kgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
+.kgrid input { width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
+
 /* control loop block diagram */
 .loop-diagram { width: 100%; height: auto; display: block; margin-top: 4px; }
 .loop-diagram .bd-line { stroke: var(--muted); stroke-width: 1.4; fill: none; }

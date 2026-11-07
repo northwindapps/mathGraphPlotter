@@ -47,7 +47,7 @@ Type an expression and it is drawn immediately. **Every free letter becomes a sl
 
 ## 2. Simulations (`sim.html`)
 
-Some of the most important equations, such as Maxwell's and Navier–Stokes, are **partial differential equations**. They can't be plotted like `y = f(x)`; they have to be *solved* numerically, one small time step at a time. The simulation page has eight tabs, and each one shows its governing equations with color-coded terms tied to the controls.
+Some of the most important equations, such as Maxwell's and Navier–Stokes, are **partial differential equations**. They can't be plotted like `y = f(x)`; they have to be *solved* numerically, one small time step at a time. The simulation page has eleven tabs, and each one shows its governing equations with color-coded terms tied to the controls.
 
 ### Fluid: Navier–Stokes
 ∂u/∂t + (u·∇)u = −∇p/ρ + ν∇²u + f, with ∇·u = 0
@@ -64,6 +64,12 @@ Some of the most important equations, such as Maxwell's and Navier–Stokes, are
 - **Drawing tools:** paint metal and glass, and place point sources or plane-wave sources. Adjust the wavelength and the glass refractive index.
 - **Views:** electric field E, time-averaged intensity, magnetic-field arrows B.
 - **Slow-mo and single-step** show the Faraday ↔ Ampère–Maxwell hand-off that *is* the light wave.
+- **3D plane wave view:** the textbook picture of light, live and rotatable.
+  - E (red) and B (blue) are perpendicular to each other and to the direction of travel, and in phase.
+  - Optional Poynting arrows show the energy flowing forward.
+  - **Polarization:** vertical, tilted, or circular (E traces a corkscrew, the Fourier helix again).
+  - A **polarizer** filter passes only the component along its axis; the readout shows Malus's law, I = I₀cos²θ.
+  - Camera buttons fly to "look along the beam", side and top views.
 
 ### Control: PID feedback
 u(t) = Kp·e + Ki·∫e dt + Kd·de/dt
@@ -123,6 +129,7 @@ Models have millions of weights, but the dynamics of training can be seen in two
   - the Rosenbrock "banana" valley;
   - a saddle point, where gradient descent stalls and Adam escapes;
   - a surface with many minima, where the starting point decides which valley each optimizer ends up in.
+  - **3D terrain view:** the loss surface as a shaded, rotatable landscape with the optimizers rolling on it as balls with trails. The saddle really looks like a saddle, and momentum visibly rolls over bumps. The Rosenbrock surface uses log-scaled height so its steep walls fit.
 - **Tiny neural network:** a 2 → H → 1 network learns circle, XOR, two-moons and spiral datasets.
   - Each hidden neuron is drawn as a small map showing the single straight edge it draws; the output bends those edges into a curved boundary.
   - Weights are drawn as edges whose thickness and color show their value.
@@ -147,6 +154,41 @@ A 256 × 256 grayscale image (a test card, printed text, or **your own photo**, 
 - **3 · Smoothing:** box and Gaussian blur (convolution), bilateral (edge-preserving), and total variation, a convex optimization, min ½‖u − f‖² + λ‖∇u‖₁, solved live with Chambolle's algorithm.
 - **Compare:** original vs. noisy vs. denoised, an optional error map, the spectrum of the noisy or the result image, and a PSNR score before → after.
 
+### Linear algebra: matrices, eigenvectors, PCA
+- **Matrix = transformation:** drag where the basis arrows î and ĵ land (the matrix's columns), or use presets: rotate, stretch, shear, reflect, squash, symmetric.
+  - The whole grid, the unit square and an "F" transform with it; "Animate from the identity" shows the motion.
+  - The determinant is the square's area: det = 0 squashes the plane flat, and a negative det flips it (the F becomes mirror-imaged).
+- **Eigenvectors:**
+  - A ring of vectors shows where each one goes; eigen-directions are drawn dashed with their λ.
+  - Drag v until Av lines up with it ("Av = λv").
+  - Rotations give complex λ and no real eigen-direction.
+  - **Power iteration** (apply A again and again) converges to the dominant eigenvector, which is the idea behind PageRank.
+- **PCA:** a data cloud with its covariance ellipse and principal axes.
+  - Rotate a projection line and watch the projected variance; its maximum is exactly λ₁ along PC1 (a Lagrange problem: max wᵀΣw subject to ‖w‖ = 1 gives Σw = λw).
+  - "Variance explained" is shown live, and "Collapse 2D → 1D" animates the dimensionality reduction.
+
+### Probability: Bayes, CLT, Markov chains
+- **Bayes' rule:** the classic medical-test puzzle drawn as 2,000 people.
+  - Sliders control how common the disease is (the prior), the test's sensitivity and its false-positive rate.
+  - A bar shows who is really sick among everyone who tested positive (16.1% at the classic settings, not 95%), alongside a natural-frequency tree and the formula with live numbers.
+  - "Positive again" uses the last posterior as the new prior: belief updating.
+- **Central limit theorem:** average n draws from a uniform, exponential, die, two-humped or unfair-coin distribution, thousands of times.
+  - The histogram of averages becomes a bell curve N(μ, σ²/n), whatever the starting shape.
+  - The readout compares the measured spread with σ/√n and shows the skewness shrinking toward 0.
+- **Markov chains:** a walker hops between states (weather, a 4-page web, two weakly linked "islands").
+  - Its visit fractions converge to the stationary distribution π, the eigenvector of P with λ = 1. The web-surfer chain with damping d *is* PageRank.
+  - A second chart shows p_k = p_0·P^k flattening onto π, and |λ₂| sets how fast; the islands chain mixes slowly (|λ₂| = 0.98).
+
+### Convolution: filters & kernels
+- **Slide & sum:** flip the kernel g, slide it across the signal f, multiply, and add. The green overlap area is the output at that point, and the output curve draws itself; drag to move by hand.
+  - **Signals:** rectangle, step, triangle, noisy wave, spikes.
+  - **Kernels:** box average, Gaussian, the **RC circuit's impulse response** (step * RC = the capacitor-charging curve), an edge detector (a derivative), and an echo.
+  - Cards connect it to linear systems (output = input * impulse response) and to probability (sums of random variables convolve; repeated convolution is the CLT).
+- **Convolution theorem:** the same result computed directly (N² multiply-adds) and by multiplying FFT spectra, shown side by side and agreeing to 10⁻¹⁵. A blur is a low-pass because its spectrum is small at high frequencies.
+- **Image kernels (CNN):** an editable 3×3 kernel with presets (identity, box, Gaussian, sharpen, Laplacian edges, Sobel ↔/↕, emboss) applied to the test card.
+  - Hover a pixel to see its 9 multiply-adds worked out.
+  - Cards explain that a CNN *learns* these 9 numbers, how to read a kernel (sum 1 keeps brightness, sum 0 detects change), and convolution vs. cross-correlation.
+
 ---
 
 ## How it works
@@ -162,6 +204,9 @@ A 256 × 256 grayscale image (a test card, printed text, or **your own photo**, 
 | Laplace | Exact impulse and step responses from partial-fraction residues, h(t) = Σ rₖ e^{pₖt}; gain normalized to unit DC gain |
 | Circuits | 4th-order Runge–Kutta on (q, i), 20 sub-steps per frame; resonance curve from the impedance, \|I\| = V/\|Z\| |
 | Learning | Full-batch gradient descent / momentum / Adam; hand-written backpropagation for a tanh network with cross-entropy loss; landscape slice along two random directions scaled to the weight norm, with the path projected by least squares; Lagrange: dense sampling of the constraint path, projected-gradient sliding with step halving, λ = ∇f·∇g / ‖∇g‖² |
+| Linear algebra | Closed-form 2×2 eigen-decomposition from the trace and determinant (real, repeated and complex cases); power iteration with normalization; sample covariance and its eigenvectors for PCA |
+| Probability | Exact Bayes posterior with whole-number frequency counts; Monte-Carlo sampling for the CLT; Markov stationary distribution by power iteration, with the mixing rate |λ₂| estimated from the decay of the worst-case distance to π |
+| Convolution | Riemann-sum convolution on a 501-point grid with exact handling of impulse (spike) signals and kernels; circular convolution two ways (direct and FFT) on 256 points; true 2D convolution (flipped kernel, clamped edges) |
 | Images | Radix-2 2D FFT (256²); separable convolution; median by window sort; bilateral with a range-weight lookup table; ROF total variation via Chambolle's dual projection (τ = 1/8); periodic-noise detection by z-score plus local peak contrast |
 
 **Code layout**
@@ -171,13 +216,16 @@ index.html, styles.css, app.js     graph plotter
 sim.html, sim.css, sim.js          simulation shell (tabs, canvas, input routing, loop)
 sim-ui.js                          shared controls and color maps
 sim-fluid.js                       Navier–Stokes
-sim-maxwell.js                     Maxwell FDTD
+sim-maxwell.js                     Maxwell FDTD + 3D plane wave & polarization
 sim-control.js                     PID and the three plants
 sim-fourier.js                     Fourier series, winding machine, drawing with circles, 3D time↔frequency and complex helix
 sim-laplace.js                     s-plane, responses, 3D landscape
 sim-circuit.js                     RC / RL / LC / series & parallel RLC circuits and the mechanical twin
 sim-learning.js                    line fitting, optimizer race, tiny neural network + loss-landscape slice, Lagrange multipliers
 sim-image.js                       image noise models, median / FFT mask / box / Gaussian / bilateral / total-variation denoising
+sim-linalg.js                      matrices as transformations, eigenvectors & power iteration, PCA
+sim-prob.js                        Bayes' rule, central limit theorem, Markov chains & PageRank
+sim-conv.js                        convolution: slide & sum, convolution theorem, 2D image kernels
 ```
 
 Each simulation is a self-contained module with the same small interface: `mount`, `resize`, `frame`, `pointer`. Adding a new tab means adding one file and one button.
@@ -194,6 +242,10 @@ The numerics were checked against known answers, not only by eye:
 - **Learning:** gradient descent converges to the exact least-squares line, and diverges right at the theoretical limit (η = 0.98 here); backpropagation matches finite-difference gradients to 6×10⁻⁸; the network reaches 100% accuracy on circle, XOR and moons and 92% on the spiral, and one neuron fails on the circle as expected.
 - **Lagrange:** the fence gives exactly x = y = P/4 with λ = P/8; on every problem λ* matches the measured df*/dc to 3 or 4 digits; the lasso optimum lands exactly on a corner (w₂ = 0) while ridge keeps both weights non-zero.
 - **Images:** the FFT matches a direct DFT to 10⁻¹²; each filter wins on its own noise type (median +13 dB on salt & pepper vs. +6 dB for blur; notch +11 dB on stripes vs. +2 dB for blur; total variation +12 dB on grain vs. about +4 dB for blur). Auto-notch finds exactly the stripe at any angle and nothing on clean images, and the total-variation energy decreases at every iteration.
+- **Linear algebra:** on 10 test matrices Av = λv holds to machine precision, the eigenvalues add up to the trace and multiply to the determinant, and det equals the signed area of the transformed square; power iteration reaches the dominant eigenvector; a brute-force search over 18,000 angles finds the PCA maximum exactly at PC1 with value λ₁.
+- **3D light wave:** E · B = 0 and |B| = |E|/c exactly at every point and time, E × B never points backward, circular light keeps |E| constant, and the simulated time-averaged intensity behind the polarizer matches Malus's cos²θ (1.00 / 0.75 / 0.25 / 0.00 at 0° / 30° / 60° / 90°; circular light loses exactly half).
+- **Probability:** Bayes gives 16.10% for the classic 1% / 95% / 5% case and 78.48% after a second positive test, both matching hand calculation; CLT averages match μ and σ/√n for every distribution, with skewness falling 1.96 → 0.89 → 0.36 as n goes 1 → 5 → 30 (exponential); Markov π satisfies πP = π to 10⁻¹⁵ and matches 400,000 simulated hops; the estimated |λ₂| = 0.4732 for the weather chain equals the exact eigenvalue.
+- **Convolution:** step * RC response matches 1 − e^(−t/τ) within the 0.02 grid spacing; echo and edge-detector outputs are exact away from the jumps; ∫(f*g) = ∫f·∫g; direct and FFT convolution agree to about 10⁻¹⁵ for every signal/kernel pair; in 2D the identity kernel changes nothing, blur preserves flat areas, Sobel ↔ responds only to vertical edges, and the kernel flip was checked with a one-pixel shift.
 - **Control:** every preset behaves as its label says. P-only error matches theory (drone: 9.81 N / Kp ≈ 1.2 m); turning anti-windup off raises overshoot from about 30% to about 90%; "Too weak" really falls over.
 - **Fluid and light:** long runs show no NaNs or blow-ups; vortex shedding, Kelvin–Helmholtz roll-up, double-slit fringes, lens focusing and dish collimation all appear as expected.
 - **Performance:** the fluid takes about 13 ms per frame, everything else under 2 ms, so all tabs should run at 60 fps.
@@ -213,7 +265,7 @@ Convolution and filtering, the z-transform, Bode and root-locus plots, a GPU (We
 
 ## Author
 
-**Designed and written by Claude** (Claude Opus 5.5, an AI model by [Anthropic](https://www.anthropic.com)), working in Claude Code at the request of, and with direction from, the project owner. The owner set the goals and topics: making the math of CS and engineering visual, then adding Maxwell, Navier–Stokes, PID control, Fourier, Laplace, RLC circuits, machine learning, Lagrange multipliers and image denoising.
+**Designed and written by Claude** (Claude Opus 5.5, an AI model by [Anthropic](https://www.anthropic.com)), working in Claude Code at the request of, and with direction from, the project owner. The owner set the goals and topics: making the math of CS and engineering visual, then adding Maxwell, Navier–Stokes, PID control, Fourier, Laplace, RLC circuits, machine learning, Lagrange multipliers, image denoising, linear algebra, probability and convolution.
 
 Claude chose the technology (plain JavaScript and Canvas, no build step), designed the interfaces and explanations, implemented every solver and visualization, and verified the numerics described above.
 

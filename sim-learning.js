@@ -520,11 +520,197 @@
     },
   };
 
+  // ================================================================== 4. Lagrange multipliers
+  // Optimize f(x, y) while staying on the path g(x, y) = c.  Optimum: ∇f = λ∇g,  and λ = d(best f)/dc.
+  const LOSS_RL = (x, y) => (x - 2.4) ** 2 + 3 * (y - 0.1) ** 2 + 1.6 * (x - 2.4) * (y - 0.1); // shared by ridge & lasso
+  const LAG_PROBS = {
+    hill: {
+      label: 'Hill & path', kind: 'max', xl: 'x →', yl: 'y →', R: [-2.5, 2.5, -2.5, 2.5], c: [1.3, 0.3, 2.1], cLabel: 'path size c', s0: 0.62, closed: true,
+      f: (x, y) => 1.2 * Math.exp(-((x - 0.6) ** 2 + (y - 0.4) ** 2) / 0.6) + 0.7 * Math.exp(-((x + 0.9) ** 2 + (y + 0.7) ** 2) / 0.4),
+      g: (x, y) => Math.hypot(x / 1.15, y / 0.8),
+      curve: (s, c) => [c * 1.15 * Math.cos(TAU * s), c * 0.8 * Math.sin(TAU * s)],
+      about: 'You must walk on an elliptical path (the white loop) across a landscape with two hills. Where on the path are you highest? ' +
+        'Not at a hilltop: at the place where the path just <b>touches</b> a contour line.',
+    },
+    fence: {
+      label: 'Fence: max area', kind: 'max', xl: 'width x →', yl: 'height y →', R: [0, 5, 0, 5], c: [6, 2, 9.6], cLabel: 'fence length P', s0: 0.15, closed: false,
+      f: (x, y) => x * y, g: (x, y) => 2 * x + 2 * y,
+      curve: (s, c) => { const x = 0.02 + s * (c / 2 - 0.04); return [x, c / 2 - x]; },
+      about: 'A rectangle with sides x and y, and fence of length P: maximize the area xy subject to 2x + 2y = P. ' +
+        'The answer is a square, x = y = P/4, and λ = P/8 is how much area one more metre of fence buys.',
+    },
+    ridge: {
+      label: 'Ridge (L2)', kind: 'min', xl: 'weight w₁ →', yl: 'weight w₂ →', R: [-1.5, 3.5, -2.5, 2.5], c: [1.2, 0.2, 2.4], cLabel: 'weight budget r', s0: 0.2, closed: true,
+      f: LOSS_RL, g: (x, y) => Math.hypot(x, y),
+      curve: (s, c) => [c * Math.cos(TAU * s), c * Math.sin(TAU * s)],
+      about: 'Two model weights (w₁, w₂). The contours are the training loss, whose best point is outside. Ridge regression limits the weights to a ' +
+        '<b>circle</b> ‖w‖₂ = r. The solution sits where a loss contour touches the circle: both weights shrink, but neither becomes exactly zero.',
+    },
+    lasso: {
+      label: 'Lasso (L1) → sparsity', kind: 'min', xl: 'weight w₁ →', yl: 'weight w₂ →', R: [-1.5, 3.5, -2.5, 2.5], c: [1.2, 0.2, 2.4], cLabel: 'weight budget r', s0: 0.2, closed: true,
+      f: LOSS_RL, g: (x, y) => Math.abs(x) + Math.abs(y),
+      curve: (s, c) => {
+        const k = Math.floor(((s % 1) + 1) % 1 * 4), u = (((s % 1) + 1) % 1) * 4 - k;
+        const P = [[c, 0], [0, c], [-c, 0], [0, -c], [c, 0]];
+        return [P[k][0] + (P[k + 1][0] - P[k][0]) * u, P[k][1] + (P[k + 1][1] - P[k][1]) * u];
+      },
+      about: 'Same loss, but the budget is the <b>diamond</b> |w₁| + |w₂| = r (L1). Its sharp corners sit on the axes, and contours very often touch a corner first, ' +
+        'so one weight becomes <b>exactly 0</b>. That is why lasso selects features: it switches unimportant ones off completely.',
+    },
+  };
+
+  const LAG = {
+    P: (o) => LAG_PROBS[o.prob],
+    setProb(o, key) { const P = LAG_PROBS[key]; Object.assign(o, { prob: key, c: P.c[0], s: P.s0, solving: false, eta: 1 }); this.heat = null; },
+    grad(fn, x, y) { const h = 1e-5; return [(fn(x + h, y) - fn(x - h, y)) / (2 * h), (fn(x, y + h) - fn(x, y - h)) / (2 * h)]; },
+    wrap(o, s) { return this.P(o).closed ? ((s % 1) + 1) % 1 : clamp(s, 0, 1); },
+    tangent(o, s) { // dγ/ds
+      const P = this.P(o), h = 1e-4, a = P.curve(this.wrap(o, s - h), o.c), b = P.curve(this.wrap(o, s + h), o.c);
+      return [(b[0] - a[0]) / (2 * h), (b[1] - a[1]) / (2 * h)];
+    },
+    samples(o, c = o.c, n = 800) {
+      const P = this.P(o), out = [];
+      for (let i = 0; i <= n; i++) { const s = P.closed ? i / n : i / n, [x, y] = P.curve(s, c); out.push({ s, x, y, f: P.f(x, y) }); }
+      return out;
+    },
+    best(o, c = o.c) {
+      const P = this.P(o), sm = this.samples(o, c, 2000);
+      return sm.reduce((b, q) => ((P.kind === 'max' ? q.f > b.f : q.f < b.f) ? q : b));
+    },
+    info(o, s = o.s) {
+      const P = this.P(o), [x, y] = P.curve(s, o.c), gf = this.grad(P.f, x, y), gg = this.grad(P.g, x, y);
+      const gg2 = gg[0] ** 2 + gg[1] ** 2, lam = (gf[0] * gg[0] + gf[1] * gg[1]) / Math.max(gg2, 1e-12);
+      const T = this.tangent(o, s), tl = Math.hypot(...T) || 1, tc = (gf[0] * T[0] + gf[1] * T[1]) / tl;
+      return { x, y, f: P.f(x, y), gf, gg, lam, tc, T: [T[0] / tl, T[1] / tl], resid: Math.hypot(gf[0] - lam * gg[0], gf[1] - lam * gg[1]) };
+    },
+    step(o) { // slide along the path in the improving direction (projected gradient), halving the step on overshoot
+      const P = this.P(o), dir = P.kind === 'max' ? 1 : -1;
+      for (let k = 0; k < 4; k++) {
+        const T = this.tangent(o, o.s), dfds = (this.grad(P.f, ...P.curve(o.s, o.c))[0] * T[0] + this.grad(P.f, ...P.curve(o.s, o.c))[1] * T[1]);
+        const ds = clamp(dir * 0.02 * o.eta * dfds / Math.max(T[0] ** 2 + T[1] ** 2, 1e-6), -0.008, 0.008);
+        if (o.lastSign && Math.sign(ds) !== o.lastSign) o.eta *= 0.5;
+        o.lastSign = Math.sign(ds);
+        o.s = this.wrap(o, o.s + ds);
+        if (Math.abs(ds) < 1e-7) { o.solving = false; break; }
+      }
+    },
+    shadowPrice(o) { // numerical d(best f)/dc, to compare with λ*
+      const P = this.P(o), d = 0.004 * (P.c[2] - P.c[1]);
+      const lo = { ...o, c: o.c - d }, hi = { ...o, c: o.c + d };
+      return (this.best(hi, hi.c).f - this.best(lo, lo.c).f) / (2 * d);
+    },
+    camera(o, b) {
+      const cam = o.cam, cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      const S = b.w * 0.36, ox = b.x + b.w / 2, oy = b.y + b.h * 0.58;
+      return (X, Y, Z) => { const x = X * cy - Y * sy, dd = X * sy + Y * cy; return [ox + x * S, oy - (Z * cp + dd * sp) * S, dd * cp - Z * sp]; };
+    },
+    draw(ctx, W, H, sim) {
+      const o = sim.o.lag, P = this.P(o), wide = W > 780;
+      const side = wide ? Math.min(W * 0.55, H - 190) : Math.min(W - 60, H * 0.5);
+      const mBox = box(46, 130, side, side, P.R[0], P.R[1], P.R[2], P.R[3]); // below the HUD
+      sim.regions = { mBox };
+      const sm = this.samples(o), best = this.best(o), I = this.info(o);
+      // local extrema along the path = all points where the path is tangent to a contour
+      const tang = [];
+      for (let i = 1; i < sm.length - 1; i++) if ((sm[i].f - sm[i - 1].f) * (sm[i + 1].f - sm[i].f) < 0) tang.push(sm[i]);
+      if (o.view === '2d') {
+        if (!this.heat || this.heat.key !== o.prob) {
+          const n = 170;
+          this.heat = { ...heatCanvas(n, n, (i, j) => P.f(P.R[0] + ((i + 0.5) / n) * (P.R[1] - P.R[0]), P.R[3] - ((j + 0.5) / n) * (P.R[3] - P.R[2]))), key: o.prob };
+        }
+        ctx.imageSmoothingEnabled = true; ctx.drawImage(this.heat.canvas, mBox.x, mBox.y, mBox.w, mBox.h);
+        frameBox(ctx, mBox, `${P.kind === 'max' ? 'Maximize' : 'Minimize'} f (contours; ${P.kind === 'max' ? 'brighter = higher' : 'darker = lower'}) on the white path g = c`);
+        axisLabels(ctx, mBox, P.xl, P.yl);
+        ctx.save(); ctx.beginPath(); ctx.rect(mBox.x, mBox.y, mBox.w, mBox.h); ctx.clip();
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(mBox.sx(0), mBox.y); ctx.lineTo(mBox.sx(0), mBox.y + mBox.h); ctx.moveTo(mBox.x, mBox.sy(0)); ctx.lineTo(mBox.x + mBox.w, mBox.sy(0)); ctx.stroke();
+        polyline(ctx, sm.map((q) => [mBox.sx(q.x), mBox.sy(q.y)]), '#ffffff', 2.6);
+        for (const q of tang) { ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(mBox.sx(q.x), mBox.sy(q.y), 6, 0, TAU); ctx.stroke(); }
+        ctx.fillStyle = COL.fit; ctx.font = '20px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('★', mBox.sx(best.x), mBox.sy(best.y));
+        // gradient arrows at the current point
+        const px = mBox.sx(I.x), py = mBox.sy(I.y), m = Math.max(Math.hypot(...I.gf), Math.abs(I.lam) * Math.hypot(...I.gg), 1e-9), Lp = 64;
+        const arr = (v, color) => { const k = Lp / m; if (Math.hypot(...v) * k > 3) arrow(ctx, px, py, px + v[0] * k, py - v[1] * k, color); };
+        arr([I.lam * I.gg[0], I.lam * I.gg[1]], '#7cf0a8');
+        arr(I.gf, COL.fit);
+        arr([I.T[0] * I.tc, I.T[1] * I.tc], '#ff6b6f');
+        dot(ctx, px, py, 6.5, '#ffffff', '#0b0e14');
+        ctx.restore();
+        ctx.font = '11px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        const ly = mBox.y + mBox.h + 20;
+        ctx.fillStyle = COL.fit; ctx.fillText('→ ∇f', mBox.x, ly);
+        ctx.fillStyle = '#7cf0a8'; ctx.fillText('→ λ∇g', mBox.x + 48, ly);
+        ctx.fillStyle = '#ff6b6f'; ctx.fillText('→ part of ∇f along the path (0 at the optimum)', mBox.x + 108, ly);
+        ctx.fillStyle = '#c9cfda'; ctx.fillText('★ best · ○ every point where the path is tangent to a contour · drag the white dot', mBox.x, ly + 16);
+      } else {
+        // 3D: the landscape with the path lifted onto it
+        const n = 40, Pj = this.camera(o, mBox), fx = (x) => ((x - P.R[0]) / (P.R[1] - P.R[0])) * 2 - 1, fy = (y) => ((y - P.R[2]) / (P.R[3] - P.R[2])) * 2 - 1;
+        let fmin = Infinity, fmax = -Infinity;
+        const grid = [];
+        for (let j = 0; j <= n; j++) { const row = []; for (let i = 0; i <= n; i++) { const x = P.R[0] + (i / n) * (P.R[1] - P.R[0]), y = P.R[2] + (j / n) * (P.R[3] - P.R[2]), f = P.f(x, y); fmin = Math.min(fmin, f); fmax = Math.max(fmax, f); row.push([x, y, f]); } grid.push(row); }
+        const fz = (f) => ((f - fmin) / (fmax - fmin || 1)) * 0.9 - 0.5;
+        const quads = [];
+        for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+          const q = [grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]].map(([x, y, f]) => Pj(fx(x), fy(y), fz(f)));
+          quads.push({ q, d: (q[0][2] + q[1][2] + q[2][2] + q[3][2]) / 4, t: (grid[j][i][2] - fmin) / (fmax - fmin || 1) });
+        }
+        quads.sort((a, b) => b.d - a.d);
+        ctx.lineWidth = 0.5;
+        for (const { q, t } of quads) {
+          const idx = (clamp(t, 0, 1) * 255) | 0;
+          ctx.fillStyle = `rgb(${SEQ[idx * 3]},${SEQ[idx * 3 + 1]},${SEQ[idx * 3 + 2]})`; ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+          ctx.beginPath(); q.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        const floor = sm.map((q) => Pj(fx(q.x), fy(q.y), -0.55)), lift = sm.map((q) => Pj(fx(q.x), fy(q.y), fz(q.f) + 0.01));
+        ctx.setLineDash([4, 4]); polyline(ctx, floor, 'rgba(255,255,255,0.45)', 1.5); ctx.setLineDash([]);
+        polyline(ctx, lift, '#ffffff', 3);
+        const cur = Pj(fx(I.x), fy(I.y), fz(I.f)), base = Pj(fx(I.x), fy(I.y), -0.55);
+        polyline(ctx, [base, cur], 'rgba(255,255,255,0.5)', 1);
+        dot(ctx, cur[0], cur[1], 6.5, '#ffffff', '#0b0e14');
+        const bp = Pj(fx(best.x), fy(best.y), fz(best.f));
+        ctx.fillStyle = COL.fit; ctx.font = '22px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('★', bp[0], bp[1] - 4);
+        frameBox(ctx, { x: mBox.x, y: mBox.y, w: 0, h: 0 }, `3D: the path g = c (dashed, on the floor) lifted onto the surface f · drag to rotate`);
+      }
+      // f along the path
+      const pb = wide ? { x: mBox.x + mBox.w + 40, y: 130, w: W - mBox.x - mBox.w - 64, h: Math.min(260, H * 0.34) } : { x: 46, y: mBox.y + mBox.h + 64, w: W - 70, h: H - mBox.y - mBox.h - 90 };
+      if (pb.h > 60 && pb.w > 120) {
+        frameBox(ctx, pb, 'f along the path (walking the white curve)');
+        let lo = Infinity, hi = -Infinity;
+        for (const q of sm) { lo = Math.min(lo, q.f); hi = Math.max(hi, q.f); }
+        const pad = (hi - lo) * 0.1 || 1, X = (s) => pb.x + 10 + s * (pb.w - 20), Y = (f) => pb.y + pb.h - 8 - ((f - lo + pad) / (hi - lo + 2 * pad)) * (pb.h - 16);
+        polyline(ctx, sm.map((q) => [X(q.s), Y(q.f)]), '#ffffff', 2);
+        for (const q of tang) { ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(X(q.s), pb.y); ctx.lineTo(X(q.s), pb.y + pb.h); ctx.stroke(); ctx.setLineDash([]); }
+        ctx.fillStyle = COL.fit; ctx.font = '18px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('★', X(best.s), Y(best.f));
+        dot(ctx, X(o.s), Y(I.f), 5.5, '#ffffff', '#0b0e14');
+        ctx.fillStyle = '#9aa3b2'; ctx.font = '11px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.fillText('dashed: flat spots of this curve = tangencies on the map', pb.x + 6, pb.y + pb.h + 6);
+      }
+    },
+    pointer(type, x, y, sim) {
+      const o = sim.o.lag, { mBox } = sim.regions || {};
+      if (!mBox) return;
+      if (o.view === '3d') {
+        if (type === 'down') sim.rot = { x, y, yaw: o.cam.yaw, pitch: o.cam.pitch };
+        else if (type === 'move' && sim.rot) { o.cam.yaw = sim.rot.yaw - (x - sim.rot.x) * 0.008; o.cam.pitch = clamp(sim.rot.pitch + (y - sim.rot.y) * 0.008, 0.05, 1.5); }
+        else sim.rot = null;
+        return;
+      }
+      const nearest = () => {
+        let bs = null, bd = Infinity;
+        for (const q of this.samples(o, o.c, 600)) { const d = Math.hypot(mBox.sx(q.x) - x, mBox.sy(q.y) - y); if (d < bd) { bd = d; bs = q.s; } }
+        return [bs, bd];
+      };
+      if (type === 'down') { const [s, d] = nearest(); if (d < 22) { sim.dragLag = true; o.s = s; o.solving = false; } }
+      else if (type === 'move' && sim.dragLag) o.s = nearest()[0];
+      else if (type === 'up' || type === 'leave') sim.dragLag = false;
+    },
+  };
+
   // ================================================================== module
   const MODES = [
     { value: 'line', label: 'Fit a line', hint: 'Drag data points · click empty space to add · drag a point out to delete · click the loss map to restart there' },
     { value: 'race', label: 'Optimizer race', hint: 'Click anywhere on the loss surface to start all optimizers from there' },
     { value: 'net', label: 'Tiny neural network', hint: 'Click the data area to add points of the selected class' },
+    { value: 'lagrange', label: 'Lagrange multipliers', hint: 'Drag the white dot along the path · or let it slide uphill/downhill on its own' },
   ];
 
   const sim = {
@@ -535,6 +721,7 @@
       line: { lr: 0.3, speed: 8 },
       race: { surface: 'valley', lr: 0.95, lrAdam: 0.1, beta: 0.9, speed: 30, enabled: { gd: true, mom: true, adam: true } },
       net: { H: 6, dataset: 'circle', optimizer: 'adam', lr: 0.03, speed: 4, addClass: 1 },
+      lag: { prob: 'hill', view: '2d', cam: { yaw: -0.6, pitch: 0.75 } },
     },
     acc: 0, frameNo: 0, regions: null, drag: null,
 
@@ -544,6 +731,7 @@
         LINE.init(this.o.line);
         RACE.restart(this.o.race);
         NET.data(this.o.net, this.o.net.dataset); NET.init(this.o.net, 5);
+        LAG.setProb(this.o.lag, this.o.lag.prob);
         this.ready = true;
       }
       this.buildPanel();
@@ -567,11 +755,42 @@
       p.append(s0);
       if (o.mode === 'line') this.panelLine(p);
       else if (o.mode === 'race') this.panelRace(p);
-      else this.panelNet(p);
+      else if (o.mode === 'net') this.panelNet(p);
+      else this.panelLag(p);
     },
     stepOnce() {
       const o = this.o;
-      if (o.mode === 'line') LINE.step(o.line); else if (o.mode === 'race') RACE.step(o.race); else NET.step(o.net);
+      if (o.mode === 'line') LINE.step(o.line); else if (o.mode === 'race') RACE.step(o.race); else if (o.mode === 'net') NET.step(o.net); else LAG.step(o.lag);
+    },
+
+    panelLag(p) {
+      const o = this.o.lag, P = LAG_PROBS[o.prob];
+      const s1 = UI.section('Constrained optimization');
+      const eq = el('div', 'eq');
+      UI.tex(eq, String.raw`\begin{gathered} \text{${P.kind === 'max' ? 'maximize' : 'minimize'} } f(x,y) \ \text{ subject to } \ g(x,y) = c \\[4pt]
+        \textcolor{#f5c451}{\nabla f} = \lambda\, \textcolor{#7cf0a8}{\nabla g}, \qquad \lambda = \frac{d f^{*}}{dc} \end{gathered}`, true);
+      s1.append(eq);
+      s1.append(UI.segmented({ options: Object.entries(LAG_PROBS).map(([value, q]) => ({ value, label: q.label })), value: o.prob, onChange: (v) => { LAG.setProb(o, v); this.buildPanel(); } }));
+      const ab = el('p', 'note'); ab.innerHTML = P.about; s1.append(ab);
+      s1.append(UI.slider({ label: P.cLabel, min: P.c[1], max: P.c[2], step: (P.c[2] - P.c[1]) / 200, value: o.c, format: (v) => v.toFixed(2), onInput: (v) => { o.c = v; } }));
+      const r = el('div', 'controls-row');
+      r.append(UI.button(P.kind === 'max' ? '▶ Slide uphill along the path' : '▶ Slide downhill along the path', () => { o.solving = true; o.eta = 1; o.lastSign = 0; }));
+      s1.append(r, UI.segmented({ options: [{ value: '2d', label: 'Contour map' }, { value: '3d', label: '3D landscape' }], value: o.view, onChange: (v) => { o.view = v; } }));
+
+      const s2 = UI.section('Why it works');
+      s2.append(UI.termCard({ color: COL.fit, tex: String.raw`\nabla f \parallel \nabla g`, title: 'The gradients line up',
+        body: 'If ∇f had any component <b>along</b> the path (red arrow), you could slide a little that way and do better. At the best point that component is zero, so ∇f points straight ' +
+          'across the path, and so does ∇g (it is always perpendicular to its own level curve g = c). Two vectors perpendicular to the same curve are parallel: <b>∇f = λ∇g</b>. ' +
+          'Geometrically, the path just touches a contour line there.' }));
+      s2.append(UI.termCard({ color: '#7cf0a8', tex: String.raw`\mathcal{L}(x,y,\lambda) = f - \lambda\,(g - c)`, title: 'λ is a price',
+        body: 'Setting all derivatives of the Lagrangian 𝓛 to zero gives the tangency condition plus the constraint itself. And ∂𝓛/∂c = λ, so λ says how much the best value f* ' +
+          'improves per unit of loosening the constraint: a <b>shadow price</b>. Move the c slider; the readout compares λ with the measured change in f*.' }));
+      s2.append(UI.termCard({ color: COL.b, tex: String.raw`\|w\|_2 \le r \;\;\text{vs.}\;\; \|w\|_1 \le r`, title: 'In machine learning',
+        body: '<b>Regularization is a constraint</b>: "fit the data, but keep the weights small." λ becomes the regularization strength. ' +
+          'Compare <b>Ridge</b> and <b>Lasso</b>: the L1 diamond has corners on the axes, so the optimum often lands exactly on one, with a weight of exactly 0. ' +
+          'At a corner ∇g has no single direction (any normal in the corner\'s "fan" counts), so ∇f need not line up with one particular ∇g there. ' +
+          'Lagrange multipliers also give SVMs (max margin), PCA (maximize variance with ‖w‖ = 1 gives Σw = λw, so λ is the variance) and softmax (maximum entropy).' }));
+      p.append(s1, s2);
     },
 
     panelLine(p) {
@@ -663,11 +882,13 @@
       if (o.running && this.drag == null) {
         if (o.mode === 'line') { this.acc += o.line.speed / 60; while (this.acc >= 1) { LINE.step(o.line); this.acc--; } }
         else if (o.mode === 'race') { this.acc += o.race.speed / 60; let n = 0; while (this.acc >= 1 && n++ < 10) { RACE.step(o.race); this.acc--; } }
-        else for (let k = 0; k < o.net.speed; k++) NET.step(o.net);
+        else if (o.mode === 'net') for (let k = 0; k < o.net.speed; k++) NET.step(o.net);
       }
+      if (o.mode === 'lagrange' && o.lag.solving) LAG.step(o.lag);
       if (o.mode === 'line') LINE.draw(ctx, W, H, this);
       else if (o.mode === 'race') RACE.draw(ctx, W, H, this);
-      else NET.draw(ctx, W, H, this);
+      else if (o.mode === 'net') NET.draw(ctx, W, H, this);
+      else LAG.draw(ctx, W, H, this);
       if (this.frameNo % 6 === 0) this.updateHud();
     },
 
@@ -681,6 +902,17 @@
         parts.push(`step ${o.race.iter} · ` + OPTS.filter(({ key }) => o.race.enabled[key]).map(({ key, label, color }) => {
           const r = o.race.runs[key]; return `<span style="color:${color}">${label}</span> ${r.dead ? 'diverged' : r.loss[r.loss.length - 1].toFixed(3)}`;
         }).join(' · '));
+      } else if (o.mode === 'lagrange') {
+        const l = o.lag, I = LAG.info(l), b = LAG.best(l), Ib = LAG.info(l, b.s);
+        parts.push(`here: f = <b>${I.f.toFixed(3)}</b> · slope along path ${I.tc.toFixed(3)} · λ ≈ ${I.lam.toFixed(3)}`);
+        parts.push(`<div>★ f* = ${b.f.toFixed(3)} at (${b.x.toFixed(2)}, ${b.y.toFixed(2)}) · <b>λ* = ${Ib.lam.toFixed(3)}</b> ≈ measured df*/dc ${LAG.shadowPrice(l).toFixed(3)}</div>`);
+        if (!l.solving && Math.abs(I.tc) < 2e-3 && Math.abs(I.f - b.f) > 1e-3) {
+          parts.push('<div class="warn">A tangency, but only a <b>local</b> optimum. Every tangency satisfies ∇f = λ∇g; compare them to find the ★.</div>');
+        } else if (l.prob === 'lasso' && Math.min(Math.abs(b.x), Math.abs(b.y)) < 0.02) {
+          parts.push('<div class="dim">★ is at a <b>corner</b>: one weight is exactly 0 (sparsity).</div>');
+        } else if (l.prob === 'ridge') {
+          parts.push('<div class="dim">★ on a smooth circle: both weights shrink, neither hits 0.</div>');
+        }
       } else {
         const n = o.net, acc = n.accs.length ? n.accs[n.accs.length - 1] : 0;
         parts.push(`step ${n.steps} · loss <b>${n.losses[n.losses.length - 1].toFixed(3)}</b> · accuracy <b>${(acc * 100).toFixed(0)}%</b> · ${NET.nParams(n.H)} weights moving at once`);
@@ -693,10 +925,11 @@
       const m = this.o.mode;
       if (m === 'line') LINE.pointer(type, x, y, this);
       else if (m === 'race') RACE.pointer(type, x, y, this);
-      else NET.pointer(type, x, y, this);
+      else if (m === 'net') NET.pointer(type, x, y, this);
+      else LAG.pointer(type, x, y, this);
     },
   };
 
-  sim._internals = { LINE, RACE, NET, SURFACES }; // exposed for automated checks
+  sim._internals = { LINE, RACE, NET, SURFACES, LAG, LAG_PROBS }; // exposed for automated checks
   (window.Sims = window.Sims || {}).learning = sim;
 })();

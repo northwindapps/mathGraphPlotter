@@ -47,7 +47,7 @@ Type an expression and it is drawn immediately. **Every free letter becomes a sl
 
 ## 2. Simulations (`sim.html`)
 
-Some of the most important equations, such as Maxwell's and Navier–Stokes, are **partial differential equations**. They can't be plotted like `y = f(x)`; they have to be *solved* numerically, one small time step at a time. The simulation page has seven tabs, and each one shows its governing equations with color-coded terms tied to the controls.
+Some of the most important equations, such as Maxwell's and Navier–Stokes, are **partial differential equations**. They can't be plotted like `y = f(x)`; they have to be *solved* numerically, one small time step at a time. The simulation page has eight tabs, and each one shows its governing equations with color-coded terms tied to the controls.
 
 ### Fluid: Navier–Stokes
 ∂u/∂t + (u·∇)u = −∇p/ρ + ν∇²u + f, with ∇·u = 0
@@ -128,6 +128,25 @@ Models have millions of weights, but the dynamics of training can be seen in two
   - Weights are drawn as edges whose thickness and color show their value.
   - A **2D slice of the full loss landscape** (along two random directions, as in Li et al. 2018) has the projected training path drawn on top.
 
+- **Lagrange multipliers:** optimize f(x, y) while staying on a path g(x, y) = c. Drag the point along the path, or let it slide, and watch ∇f (gold), λ∇g (green) and the part of ∇f along the path (red, zero at an optimum).
+  - **Hill & path:** the best point is where the path just touches a contour, not at a hilltop. Every tangency is marked, and sliding can stop at a merely *local* optimum.
+  - **Fence:** the classic maximum-area rectangle; the answer is a square with λ = P/8.
+  - **Ridge (L2) vs. lasso (L1):** the same loss with a circle vs. a diamond budget. Lasso's optimum lands on a corner, with a weight of exactly 0. This is why L1 regularization selects features.
+  - **λ as a "shadow price":** the readout compares λ* with the measured change in the best value as the constraint loosens (df*/dc).
+  - **3D view:** the path lifted onto the landscape.
+
+### Images: denoising
+A 256 × 256 grayscale image (a test card, printed text, or **your own photo**, which never leaves the browser), with three kinds of noise and a three-stage pipeline:
+
+- **Noise:** Gaussian grain, salt & pepper (dead pixels), and periodic stripes (interference) with adjustable strength, frequency and angle.
+- **1 · Median filter:** a vote among neighbours, so outliers never win. The classic cure for salt & pepper.
+- **2 · Fourier mask (2D FFT):**
+  - Stripes show up in the spectrum as a pair of bright dots. Click a dot to notch it out, or let **auto-find** do it.
+  - Auto-find tells noise from real image detail by its sharpness: stripes covering the whole image make a needle-sharp peak, while real patterns (text lines, a checkerboard) make broader bumps.
+  - There is also a low-pass radius, plus an ideal (sharp) option that shows Gibbs ringing.
+- **3 · Smoothing:** box and Gaussian blur (convolution), bilateral (edge-preserving), and total variation, a convex optimization, min ½‖u − f‖² + λ‖∇u‖₁, solved live with Chambolle's algorithm.
+- **Compare:** original vs. noisy vs. denoised, an optional error map, the spectrum of the noisy or the result image, and a PSNR score before → after.
+
 ---
 
 ## How it works
@@ -142,7 +161,8 @@ Models have millions of weights, but the dynamics of training can be seen in two
 | Fourier | Direct DFT of 512 samples per period; complex DFT of a 256-point arc-length-resampled path for the drawings; 3D views use a small orthographic camera (yaw/pitch, drag to rotate, animated flights between named views) drawn on Canvas 2D |
 | Laplace | Exact impulse and step responses from partial-fraction residues, h(t) = Σ rₖ e^{pₖt}; gain normalized to unit DC gain |
 | Circuits | 4th-order Runge–Kutta on (q, i), 20 sub-steps per frame; resonance curve from the impedance, \|I\| = V/\|Z\| |
-| Learning | Full-batch gradient descent / momentum / Adam; hand-written backpropagation for a tanh network with cross-entropy loss; landscape slice along two random directions scaled to the weight norm, with the path projected by least squares |
+| Learning | Full-batch gradient descent / momentum / Adam; hand-written backpropagation for a tanh network with cross-entropy loss; landscape slice along two random directions scaled to the weight norm, with the path projected by least squares; Lagrange: dense sampling of the constraint path, projected-gradient sliding with step halving, λ = ∇f·∇g / ‖∇g‖² |
+| Images | Radix-2 2D FFT (256²); separable convolution; median by window sort; bilateral with a range-weight lookup table; ROF total variation via Chambolle's dual projection (τ = 1/8); periodic-noise detection by z-score plus local peak contrast |
 
 **Code layout**
 
@@ -156,7 +176,8 @@ sim-control.js                     PID and the three plants
 sim-fourier.js                     Fourier series, winding machine, drawing with circles, 3D time↔frequency and complex helix
 sim-laplace.js                     s-plane, responses, 3D landscape
 sim-circuit.js                     RC / RL / LC / series & parallel RLC circuits and the mechanical twin
-sim-learning.js                    line fitting, optimizer race, tiny neural network + loss-landscape slice
+sim-learning.js                    line fitting, optimizer race, tiny neural network + loss-landscape slice, Lagrange multipliers
+sim-image.js                       image noise models, median / FFT mask / box / Gaussian / bilateral / total-variation denoising
 ```
 
 Each simulation is a self-contained module with the same small interface: `mount`, `resize`, `frame`, `pointer`. Adding a new tab means adding one file and one button.
@@ -171,6 +192,8 @@ The numerics were checked against known answers, not only by eye:
 - **Laplace:** impulse responses match closed-form solutions (first-order, underdamped, overdamped, unstable) to machine precision; a zero on the jω axis gives exactly zero gain there.
 - **Circuits:** the RC, RL, LC, underdamped series RLC and parallel RLC responses match their closed-form solutions to about 10⁻¹² relative error; LC energy is conserved to 10⁻¹³ over 10 s. Driving at f₀ gives exactly V/R (series current) and I·R (parallel voltage).
 - **Learning:** gradient descent converges to the exact least-squares line, and diverges right at the theoretical limit (η = 0.98 here); backpropagation matches finite-difference gradients to 6×10⁻⁸; the network reaches 100% accuracy on circle, XOR and moons and 92% on the spiral, and one neuron fails on the circle as expected.
+- **Lagrange:** the fence gives exactly x = y = P/4 with λ = P/8; on every problem λ* matches the measured df*/dc to 3 or 4 digits; the lasso optimum lands exactly on a corner (w₂ = 0) while ridge keeps both weights non-zero.
+- **Images:** the FFT matches a direct DFT to 10⁻¹²; each filter wins on its own noise type (median +13 dB on salt & pepper vs. +6 dB for blur; notch +11 dB on stripes vs. +2 dB for blur; total variation +12 dB on grain vs. about +4 dB for blur). Auto-notch finds exactly the stripe at any angle and nothing on clean images, and the total-variation energy decreases at every iteration.
 - **Control:** every preset behaves as its label says. P-only error matches theory (drone: 9.81 N / Kp ≈ 1.2 m); turning anti-windup off raises overshoot from about 30% to about 90%; "Too weak" really falls over.
 - **Fluid and light:** long runs show no NaNs or blow-ups; vortex shedding, Kelvin–Helmholtz roll-up, double-slit fringes, lens focusing and dish collimation all appear as expected.
 - **Performance:** the fluid takes about 13 ms per frame, everything else under 2 ms, so all tabs should run at 60 fps.
@@ -190,7 +213,7 @@ Convolution and filtering, the z-transform, Bode and root-locus plots, a GPU (We
 
 ## Author
 
-**Designed and written by Claude** (Claude Opus 5.5, an AI model by [Anthropic](https://www.anthropic.com)), working in Claude Code at the request of, and with direction from, the project owner. The owner set the goals and topics: making the math of CS and engineering visual, then adding Maxwell, Navier–Stokes, PID control, Fourier, Laplace, RLC circuits and machine learning.
+**Designed and written by Claude** (Claude Opus 5.5, an AI model by [Anthropic](https://www.anthropic.com)), working in Claude Code at the request of, and with direction from, the project owner. The owner set the goals and topics: making the math of CS and engineering visual, then adding Maxwell, Navier–Stokes, PID control, Fourier, Laplace, RLC circuits, machine learning, Lagrange multipliers and image denoising.
 
 Claude chose the technology (plain JavaScript and Canvas, no build step), designed the interfaces and explanations, implemented every solver and visualization, and verified the numerics described above.
 

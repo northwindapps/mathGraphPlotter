@@ -1,6 +1,6 @@
 # Math Graph Plotter & Simulations
 
-**▶ Try it live: [northwindapps.github.io/mathGraphPlotter](https://northwindapps.github.io/mathGraphPlotter/)** (graph plotter) · **[all 12 simulations](https://northwindapps.github.io/mathGraphPlotter/sim.html)**. It runs in any browser, on a computer, tablet or phone, with nothing to install.
+**▶ Try it live: [northwindapps.github.io/mathGraphPlotter](https://northwindapps.github.io/mathGraphPlotter/)** (graph plotter) · **[all 12 simulation topics](https://northwindapps.github.io/mathGraphPlotter/sim.html)**. It runs in any browser, on a computer, tablet or phone, with nothing to install.
 
 Interactive, animated visualizations for the math behind computer science and engineering: functions, differential equations, feedback control, signal transforms, linear algebra, probability and machine learning.
 
@@ -49,7 +49,7 @@ Type an expression and it is drawn immediately. **Every free letter becomes a sl
 
 ## 2. Simulations (`sim.html`)
 
-Some of the most important equations, such as Maxwell's and Navier–Stokes, are **partial differential equations**. They can't be plotted like `y = f(x)`; they have to be *solved* numerically, one small time step at a time. The simulation page has eleven tabs, and each one shows its governing equations with color-coded terms tied to the controls.
+Some of the most important equations, such as Maxwell's and Navier–Stokes, are **partial differential equations**. They can't be plotted like `y = f(x)`; they have to be *solved* numerically, one small time step at a time. The simulation page has twelve tabs, and each one shows its governing equations with color-coded terms tied to the controls.
 
 ### Fluid: Navier–Stokes
 ∂u/∂t + (u·∇)u = −∇p/ρ + ν∇²u + f, with ∇·u = 0
@@ -191,6 +191,13 @@ A 256 × 256 grayscale image (a test card, printed text, or **your own photo**, 
   - Hover a pixel to see its 9 multiply-adds worked out.
   - Cards explain that a CNN *learns* these 9 numbers, how to read a kernel (sum 1 keeps brightness, sum 0 detects change), and convolution vs. cross-correlation.
 
+### Tensors: n-dimensional arrays and loops
+- **Shapes & memory:** rank 0 to 4 tensors (scalar, vector, matrix, stack of matrices, batch), each shown above the **one flat array** that actually holds the numbers.
+  - Hover any cell to see offset = Σ index·stride worked out.
+  - **Transpose** swaps strides without moving data, so the view becomes non-contiguous. **Reshape** is free on contiguous data and needs a copy otherwise (`.view` vs. `.contiguous()`).
+- **Operations = loops:** add, broadcasting, sum over an axis (reduction), matrix multiply (contraction) and outer product. Each steps through its nested-loop code with the executing line highlighted, the cells being read (yellow) and written (green), the loop variables, and the einsum string ('ij,jk->ik').
+- **Tensors in a neural network:** an image classifier's 4D activations [batch, height, width, channels] and weight tensors, with live element counts, memory size, parameter counts and multiply-adds as you change the batch size, image size, channels, filters and classes.
+
 ---
 
 ## How it works
@@ -228,6 +235,7 @@ sim-image.js                       image noise models, median / FFT mask / box /
 sim-linalg.js                      matrices as transformations, eigenvectors & power iteration, PCA
 sim-prob.js                        Bayes' rule, central limit theorem, Markov chains & PageRank
 sim-conv.js                        convolution: slide & sum, convolution theorem, 2D image kernels
+sim-tensor.js                      tensors: shapes & strides in memory, operations as loops (einsum), neural-net shapes
 ```
 
 Each simulation is a self-contained module with the same small interface: `mount`, `resize`, `frame`, `pointer`. Adding a new tab means adding one file and one button.
@@ -248,6 +256,7 @@ The numerics were checked against known answers, not only by eye:
 - **3D light wave:** E · B = 0 and |B| = |E|/c exactly at every point and time, E × B never points backward, circular light keeps |E| constant, and the simulated time-averaged intensity behind the polarizer matches Malus's cos²θ (1.00 / 0.75 / 0.25 / 0.00 at 0° / 30° / 60° / 90°; circular light loses exactly half).
 - **Probability:** Bayes gives 16.10% for the classic 1% / 95% / 5% case and 78.48% after a second positive test, both matching hand calculation; CLT averages match μ and σ/√n for every distribution, with skewness falling 1.96 → 0.89 → 0.36 as n goes 1 → 5 → 30 (exponential); Markov π satisfies πP = π to 10⁻¹⁵ and matches 400,000 simulated hops; the estimated |λ₂| = 0.4732 for the weather chain equals the exact eigenvalue.
 - **Convolution:** step * RC response matches 1 − e^(−t/τ) within the 0.02 grid spacing; echo and edge-detector outputs are exact away from the jumps; ∫(f*g) = ∫f·∫g; direct and FFT convolution agree to about 10⁻¹⁵ for every signal/kernel pair; in 2D the identity kernel changes nothing, blur preserves flat areas, Sobel ↔ responds only to vertical edges, and the kernel flip was checked with a one-pixel shift.
+- **Tensors:** strides for [2,3,4] are [12,4,1] and contiguous reading visits memory 0…23 in order; transposing gives T[k][j][i] = X[i][j][k] for every cell with no data moved; reshape is copy-free when contiguous and copies correctly when not; all five operation loops produce the right results; the neural-net parameter and multiply-add counts match hand calculation.
 - **Control:** every preset behaves as its label says. P-only error matches theory (drone: 9.81 N / Kp ≈ 1.2 m); turning anti-windup off raises overshoot from about 30% to about 90%; "Too weak" really falls over.
 - **Fluid and light:** long runs show no NaNs or blow-ups; vortex shedding, Kelvin–Helmholtz roll-up, double-slit fringes, lens focusing and dish collimation all appear as expected.
 - **Performance:** the fluid takes about 13 ms per frame, everything else under 2 ms, so all tabs should run at 60 fps.
@@ -267,7 +276,7 @@ Convolution and filtering, the z-transform, Bode and root-locus plots, a GPU (We
 
 ## Author
 
-**Designed and written by Claude** (Claude Opus 5.5, an AI model by [Anthropic](https://www.anthropic.com)), working in Claude Code at the request of, and with direction from, the project owner. The owner set the goals and topics: making the math of CS and engineering visual, then adding Maxwell, Navier–Stokes, PID control, Fourier, Laplace, RLC circuits, machine learning, Lagrange multipliers, image denoising, linear algebra, probability and convolution.
+**Designed and written by Claude** (Claude Opus 5.5, an AI model by [Anthropic](https://www.anthropic.com)), working in Claude Code at the request of, and with direction from, the project owner. The owner set the goals and topics: making the math of CS and engineering visual, then adding Maxwell, Navier–Stokes, PID control, Fourier, Laplace, RLC circuits, machine learning, Lagrange multipliers, image denoising, linear algebra, probability, convolution and tensors.
 
 Claude chose the technology (plain JavaScript and Canvas, no build step), designed the interfaces and explanations, implemented every solver and visualization, and verified the numerics described above.
 

@@ -47,7 +47,7 @@ Type an expression and it is drawn immediately. **Every free letter becomes a sl
 
 ## 2. Simulations (`sim.html`)
 
-Some of the most important equations, such as Maxwell's and Navier–Stokes, are **partial differential equations**. They can't be plotted like `y = f(x)`; they have to be *solved* numerically, one small time step at a time. The simulation page has six tabs, and each one shows its governing equations with color-coded terms tied to the controls.
+Some of the most important equations, such as Maxwell's and Navier–Stokes, are **partial differential equations**. They can't be plotted like `y = f(x)`; they have to be *solved* numerically, one small time step at a time. The simulation page has seven tabs, and each one shows its governing equations with color-coded terms tied to the controls.
 
 ### Fluid: Navier–Stokes
 ∂u/∂t + (u·∇)u = −∇p/ρ + ν∇²u + f, with ∇·u = 0
@@ -110,6 +110,20 @@ L·q″ + R·q′ + q/C = V(t), which is Kirchhoff's voltage law around the loop
 - **Plots:** voltages (which always add up to the source), current, and the energy sloshing between the capacitor and the inductor.
 - **Mechanical twin:** a mass, spring and damper beside the circuit, driven by the same equation (L ↔ m, R ↔ c, 1/C ↔ k, q ↔ x).
 
+### Learning: how ML weights move
+Models have millions of weights, but the dynamics of training can be seen in two dimensions, and the field itself studies them through 2D slices.
+
+- **Fit a line:** y = w·x + b has exactly two weights. The data view (the line, with red error bars) and the loss surface L(w, b) update together as gradient descent walks downhill; a green arrow shows −∇L and a ★ marks the exact least-squares answer. Drag, add or delete points and the whole surface reshapes. Divergence starts exactly at the predicted learning rate η = 2/λmax.
+- **Optimizer race:** plain gradient descent, momentum (the "heavy ball", m·θ″ + c·θ′ = −∇L, the same equation as the Circuits tab) and Adam race on four surfaces:
+  - a narrow valley, where gradient descent zig-zags;
+  - the Rosenbrock "banana" valley;
+  - a saddle point, where gradient descent stalls and Adam escapes;
+  - a surface with many minima, where the starting point decides which valley each optimizer ends up in.
+- **Tiny neural network:** a 2 → H → 1 network learns circle, XOR, two-moons and spiral datasets.
+  - Each hidden neuron is drawn as a small map showing the single straight edge it draws; the output bends those edges into a curved boundary.
+  - Weights are drawn as edges whose thickness and color show their value.
+  - A **2D slice of the full loss landscape** (along two random directions, as in Li et al. 2018) has the projected training path drawn on top.
+
 ---
 
 ## How it works
@@ -124,6 +138,7 @@ L·q″ + R·q′ + q/C = V(t), which is Kirchhoff's voltage law around the loop
 | Fourier | Direct DFT of 512 samples per period; complex DFT of a 256-point arc-length-resampled path for the drawings |
 | Laplace | Exact impulse and step responses from partial-fraction residues, h(t) = Σ rₖ e^{pₖt}; gain normalized to unit DC gain |
 | Circuits | 4th-order Runge–Kutta on (q, i), 20 sub-steps per frame; resonance curve from the impedance, \|I\| = V/\|Z\| |
+| Learning | Full-batch gradient descent / momentum / Adam; hand-written backpropagation for a tanh network with cross-entropy loss; landscape slice along two random directions scaled to the weight norm, with the path projected by least squares |
 
 **Code layout**
 
@@ -137,6 +152,7 @@ sim-control.js                     PID and the three plants
 sim-fourier.js                     Fourier series, winding machine, drawing with circles
 sim-laplace.js                     s-plane, responses, 3D landscape
 sim-circuit.js                     RC / RL / LC / series & parallel RLC circuits and the mechanical twin
+sim-learning.js                    line fitting, optimizer race, tiny neural network + loss-landscape slice
 ```
 
 Each simulation is a self-contained module with the same small interface: `mount`, `resize`, `frame`, `pointer`. Adding a new tab means adding one file and one button.
@@ -150,6 +166,7 @@ The numerics were checked against known answers, not only by eye:
 - **Fourier:** square-wave coefficients match 4/π, 0, 4/(3π), … to four decimals; the winding machine finds the correct peaks and heights.
 - **Laplace:** impulse responses match closed-form solutions (first-order, underdamped, overdamped, unstable) to machine precision; a zero on the jω axis gives exactly zero gain there.
 - **Circuits:** the RC, RL, LC, underdamped series RLC and parallel RLC responses match their closed-form solutions to about 10⁻¹² relative error; LC energy is conserved to 10⁻¹³ over 10 s. Driving at f₀ gives exactly V/R (series current) and I·R (parallel voltage).
+- **Learning:** gradient descent converges to the exact least-squares line, and diverges right at the theoretical limit (η = 0.98 here); backpropagation matches finite-difference gradients to 6×10⁻⁸; the network reaches 100% accuracy on circle, XOR and moons and 92% on the spiral, and one neuron fails on the circle as expected.
 - **Control:** every preset behaves as its label says. P-only error matches theory (drone: 9.81 N / Kp ≈ 1.2 m); turning anti-windup off raises overshoot from about 30% to about 90%; "Too weak" really falls over.
 - **Fluid and light:** long runs show no NaNs or blow-ups; vortex shedding, Kelvin–Helmholtz roll-up, double-slit fringes, lens focusing and dish collimation all appear as expected.
 - **Performance:** the fluid takes about 13 ms per frame, everything else under 2 ms, so all tabs should run at 60 fps.
@@ -169,7 +186,7 @@ Convolution and filtering, the z-transform, Bode and root-locus plots, a GPU (We
 
 ## Author
 
-**Designed and written by Claude** (Claude Opus 5.5, an AI model by [Anthropic](https://www.anthropic.com)), working in Claude Code at the request of, and with direction from, the project owner. The owner set the goals and topics: making the math of CS and engineering visual, then adding Maxwell, Navier–Stokes, PID control, Fourier, Laplace and RLC circuits.
+**Designed and written by Claude** (Claude Opus 5.5, an AI model by [Anthropic](https://www.anthropic.com)), working in Claude Code at the request of, and with direction from, the project owner. The owner set the goals and topics: making the math of CS and engineering visual, then adding Maxwell, Navier–Stokes, PID control, Fourier, Laplace, RLC circuits and machine learning.
 
 Claude chose the technology (plain JavaScript and Canvas, no build step), designed the interfaces and explanations, implemented every solver and visualization, and verified the numerics described above.
 

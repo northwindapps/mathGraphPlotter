@@ -9,7 +9,7 @@
 .panel > .nav-link { display: inline-block; margin-top: 2px; }
 
 .tabs {
-  display: flex; gap: 4px; margin: 14px 0 4px; padding: 3px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 14px 0 4px; padding: 3px;
   background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px;
 }
 .tab {

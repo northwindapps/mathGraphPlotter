@@ -1,6 +1,8 @@
 # Math Graph Plotter & Simulations
 
-Interactive, animated visualizations for the math behind computer science and engineering: functions, differential equations, feedback control and signal transforms.
+**▶ Try it live: [northwindapps.github.io/mathGraphPlotter](https://northwindapps.github.io/mathGraphPlotter/)** (graph plotter) · **[all 12 simulations](https://northwindapps.github.io/mathGraphPlotter/sim.html)**. It runs in any browser, on a computer, tablet or phone, with nothing to install.
+
+Interactive, animated visualizations for the math behind computer science and engineering: functions, differential equations, feedback control, signal transforms, linear algebra, probability and machine learning.
 
 The project started from a simple observation: formulas full of variables and constants are hard to grasp as static symbols on a page. Watching them **move** while you change one constant at a time makes them much easier to understand. Every tool here follows the same rule: show the equation, color-code its terms, let you change each one, and show the effect immediately.
 

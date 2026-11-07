@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Physics Simulations</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="sim.css">
+</head>
+<body class="sim-page">
+  <div class="app">
+    <aside class="panel">
+      <header class="brand">
+        <h1>Simulations</h1>
+        <a class="nav-link" href="index.html">← Graph plotter</a>
+      </header>
+      <nav class="tabs" role="tablist">
+        <button class="tab" role="tab" data-sim="fluid">Fluid · Navier–Stokes</button>
+        <button class="tab" role="tab" data-sim="em">Light · Maxwell</button>
+      </nav>
+      <div id="simPanel"></div>
+    </aside>
+
+    <main class="stage">
+      <canvas id="sim"></canvas>
+      <div id="hud" class="sim-hud"></div>
+      <div id="stageHint" class="stage-hint"></div>
+    </main>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+  <script src="sim-ui.js"></script>
+  <script src="sim-fluid.js"></script>
+  <script src="sim-maxwell.js"></script>
+  <script src="sim.js"></script>
+</body>
+</html>

@@ -27,8 +27,27 @@ Supported: `+ - * / ^`, implicit multiplication (`2x`), `sin cos tan exp log log
 - **Plot derivative** draws f′(x) as a dashed curve. The symbolic derivative also appears under the selected expression.
 - **Copy share link** puts the whole state (expressions, sliders, view) in the URL.
 
+## Physics simulations (`sim.html`)
+
+Some equations (Maxwell, Navier–Stokes) are *partial differential equations*. They can't be plotted directly; they have to be solved step by step on a grid. `sim.html` has two live solvers. Each one shows its equations with color-coded terms that you can switch off or adjust.
+
+**Fluid: Navier–Stokes** (Stable Fluids, Stam 1999, with MacCormack dye advection)
+- *Stir a tank:* drag to push the fluid and drop dye.
+- *Wind tunnel:* flow past a cylinder. Change ν to move between a smooth wake and a von Kármán vortex street. The Reynolds number is shown live.
+- *Shear layer:* the Kelvin–Helmholtz instability.
+- Toggle advection or pressure off to see what each term does. Views: dye, speed, vorticity, pressure, velocity arrows.
+
+**Light: Maxwell** (FDTD / Yee scheme, 2D TMz, absorbing borders)
+- Experiments: point source, two-source interference, double slit, refraction, lens, parabolic dish.
+- Draw your own sources, plane waves, metal and glass. Adjust the wavelength and the glass refractive index.
+- Views: electric field, time-averaged intensity, magnetic-field arrows. Slow-mo and single-step show the Faraday ↔ Ampère hand-off.
+
 ## Files
 
 - `index.html`: page layout
 - `styles.css`: styling, light and dark mode
 - `app.js`: parsing (math.js), sampling, canvas rendering, animation, interaction
+- `sim.html`, `sim.css`, `sim.js`: simulation page shell (tabs, canvas, input routing)
+- `sim-fluid.js`: Navier–Stokes solver and its panel
+- `sim-maxwell.js`: Maxwell FDTD solver and its panel
+- `sim-ui.js`: shared controls and color maps

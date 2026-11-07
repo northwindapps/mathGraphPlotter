@@ -1,0 +1,64 @@
+/* Extra styles for sim.html (builds on styles.css) */
+
+.sim-page .stage { background: #0b0e14; }
+#sim { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+.sim-page .stage-hint { color: #aab2c0; background: rgb(11 14 20 / 0.7); }
+
+.nav-link { color: var(--accent); text-decoration: none; font-size: 13px; white-space: nowrap; }
+.nav-link:hover { text-decoration: underline; }
+.panel > .nav-link { display: inline-block; margin-top: 2px; }
+
+.tabs {
+  display: flex; gap: 4px; margin: 14px 0 4px; padding: 3px;
+  background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px;
+}
+.tab {
+  flex: 1; font: inherit; font-size: 13px; padding: 7px 6px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.tab.active { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 0.14); }
+
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button {
+  font: inherit; font-size: 12.5px; padding: 5px 10px; cursor: pointer;
+  color: var(--text); background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px;
+}
+.seg button:hover { border-color: var(--accent); }
+.seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.controls-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.controls-row .ghost-btn { margin-top: 0; }
+.note { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+
+.eq {
+  background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 6px; overflow-x: auto; font-size: 12.5px;
+}
+.eq .katex-display { margin: 0; }
+
+.term {
+  border: 1px solid var(--border); border-left: 3px solid var(--tc);
+  border-radius: 8px; padding: 9px 10px; margin-top: 8px;
+}
+.term-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.term-title { font-weight: 600; font-size: 13px; color: var(--tc); }
+.term-tex { font-size: 13px; }
+.term-body { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; }
+.term .check { margin: 8px 0 0; }
+
+.sim-slider { display: block; margin-top: 8px; cursor: default; }
+.sim-slider-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+.sim-val { font-variant-numeric: tabular-nums; color: var(--muted); }
+.sim-slider input { width: 100%; margin: 4px 0 0; accent-color: var(--accent); }
+
+.sim-hud {
+  position: absolute; top: 12px; left: 12px; max-width: min(360px, calc(100% - 24px));
+  color: #e4e7ee; background: rgb(11 14 20 / 0.74); border: 1px solid rgb(255 255 255 / 0.09);
+  border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; pointer-events: none;
+}
+.sim-hud:empty { display: none; }
+.sim-hud b { font-weight: 600; }
+.sim-hud .dim { color: #9aa3b2; }
+.sim-hud .warn { color: #ffb86b; }
+.legend-bar { height: 8px; width: 190px; border-radius: 4px; margin: 6px 0 2px; }
+.legend-labels { display: flex; justify-content: space-between; width: 190px; color: #9aa3b2; font-size: 11px; }
